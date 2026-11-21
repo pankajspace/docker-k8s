@@ -32,7 +32,7 @@ jobs:
       - name: Build development client image
         run: docker build -t multi-client-test -f ./client/Dockerfile.dev ./client
 
-      - name: Run Jest unit tests
+      - name: Run Vitest unit tests
         run: docker run -e CI=true multi-client-test npm test
 
   build:

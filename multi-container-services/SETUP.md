@@ -73,13 +73,13 @@ Once all containers are up:
    - **Indexes I have seen** displays the submitted index retrieved from **PostgreSQL**.
    - **Calculated Values** displays the Fibonacci result computed asynchronously by the **Worker** and stored in **Redis**.
 
-> **Why refresh?** `Fib.js` fetches `/api/values/all` and `/api/values/current` on initial component mount, and `POST /api/values` returns `{ working: true }` immediately while the worker computes the value in the background.
+> **Note:** `Fib.jsx` automatically refreshes after submitting and includes a **Refresh** button if a large index is still being computed in the background.
 
 ### Live Reloading During Development
 
 Source folders are bind-mounted into their containers in `docker-compose.yml`:
 
-- **`./client`** -> React Dev Server with WebSocket Hot Module Replacement (`/ws`, `WDS_SOCKET_PORT=0`).
+- **`./client`** -> Vite Dev Server with WebSocket Hot Module Replacement through Nginx (`:3050`).
 - **`./server`** -> Auto-restarts on file edits via `nodemon`.
 - **`./worker`** -> Auto-restarts on file edits via `nodemon`.
 
@@ -140,7 +140,7 @@ docker build -t multi-worker ./worker
 
 | Service | Production Dockerfile | Runtime Behavior |
 | :--- | :--- | :--- |
-| **`client`** | `./client/Dockerfile` | Stage 1 builds static React bundle; Stage 2 serves `/app/build` via Nginx on port `3000` with SPA `try_files` fallback |
+| **`client`** | `./client/Dockerfile` | Stage 1 builds static Vite/React bundle (`/app/dist`); Stage 2 serves it via Nginx on port `3000` with SPA `try_files` fallback |
 | **`nginx`** | `./nginx/Dockerfile` | Nginx reverse proxy routing `/`, `/ws`, and `/api/*` |
 | **`server`** | `./server/Dockerfile` | Runs `node index.js` (Express on port `5000`) |
 | **`worker`** | `./worker/Dockerfile` | Runs `node index.js` (Redis `"insert"` subscriber) |
@@ -171,7 +171,6 @@ docker build -t multi-worker ./worker
 | `PGPORT` | `5432` | `api` | Postgres internal port |
 | `REDIS_HOST` | `redis` | `api`, `worker` | Redis Docker service hostname |
 | `REDIS_PORT` | `6379` | `api`, `worker` | Redis internal port |
-| `WDS_SOCKET_PORT` | `0` | `client` | Enables Webpack Dev Server WebSocket HMR through Nginx (`:3050`) |
 
 ---
 

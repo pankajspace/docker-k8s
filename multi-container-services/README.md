@@ -54,7 +54,7 @@ flowchart LR
 | Service | Container Role | Tech Stack | Internal Port |
 | :--- | :--- | :--- | :--- |
 | **`nginx`** | Single entry point & HTTP/WS reverse proxy | Nginx | `80` (Host `3050`) |
-| **`client`** | Single-Page Application (SPA) UI | React 18, React Router, Axios | `3000` |
+| **`client`** | Single-Page Application (SPA) UI | React 18, Vite, React Router, Axios | `3000` |
 | **`api`** | REST API coordinating Postgres & Redis | Node.js, Express, `pg`, `redis` | `5000` |
 | **`worker`** | Asynchronous Fibonacci calculator | Node.js, `redis` | None (event-driven) |
 | **`redis`** | In-memory Hash store + Pub/Sub broker | Redis | `6379` |
@@ -82,8 +82,7 @@ flowchart TD
 ```
 
 **Key Configuration Details (`nginx/default.conf`):**
-- **`location /`**: Forwards UI page and static asset requests to `client:3000`.
-- **`location /ws`**: Upgrades connections to WebSockets so Create React App's Webpack Dev Server can push Hot Module Replacement (HMR) updates during development.
+- **`location /`**: Forwards UI page, static asset, and Vite WebSocket HMR requests to `client:3000` (with HTTP/1.1 `Upgrade` headers).
 - **`location /api`**: Strips the `/api` prefix using `rewrite /api/(.*) /$1 break;` before forwarding to `api:5000` (e.g., `/api/values/all` arrives at Express as `/values/all`).
 
 ---
@@ -96,9 +95,9 @@ The frontend is a React 18 SPA using `react-router-dom` for client-side navigati
 
 ```mermaid
 flowchart TD
-    Root["index.js\n(Mounts App to #root)"] --> App["App.js\n(BrowserRouter & Navigation)"]
-    App -->|"Route: /"| Fib["Fib.js\n(Main Calculator View)"]
-    App -->|"Route: /otherpage"| Other["OtherPage.js\n(Secondary SPA Route)"]
+    Root["index.jsx\n(Mounts App to #root)"] --> App["App.jsx\n(BrowserRouter & Navigation)"]
+    App -->|"Route: /"| Fib["Fib.jsx\n(Main Calculator View)"]
+    App -->|"Route: /otherpage"| Other["OtherPage.jsx\n(Secondary SPA Route)"]
 
     Fib -->|"useEffect() on mount"| G1["GET /api/values/all\n(seenIndexes state)"]
     Fib -->|"useEffect() on mount"| G2["GET /api/values/current\n(values state)"]
@@ -115,16 +114,16 @@ flowchart TD
 flowchart LR
     subgraph Dev["Development (client/Dockerfile.dev)"]
         D1["node:lts-alpine"] --> D2["npm install\n+ Bind Mount ./client:/app"]
-        D2 --> D3["CMD: npm run start\n(CRA Dev Server on :3000\nwith WDS_SOCKET_PORT=0)"]
+        D2 --> D3["CMD: npm run start\n(Vite Dev Server on :3000)"]
     end
 
     subgraph Prod["Production Multi-Stage (client/Dockerfile)"]
         direction LR
         subgraph Stage1["Stage 1: builder (node:lts-alpine)"]
-            P1["npm install"] --> P2["npm run build\n(/app/build static bundle)"]
+            P1["npm install"] --> P2["npm run build\n(/app/dist static bundle)"]
         end
         subgraph Stage2["Stage 2: runtime (nginx)"]
-            P3["Copy /app/build ->\n/usr/share/nginx/html"] --> P4["client/nginx/default.conf\nListen :3000\ntry_files $uri $uri/ /index.html"]
+            P3["Copy /app/dist ->\n/usr/share/nginx/html"] --> P4["client/nginx/default.conf\nListen :3000\ntry_files $uri $uri/ /index.html"]
         end
         P2 -->|"COPY --from=builder"| P3
     end
@@ -213,7 +212,7 @@ flowchart TB
 flowchart TB
     subgraph Compose["Docker Compose Default Bridge Network"]
         Nginx["nginx\nHost :3050 -> :80\nrestart: always"]
-        Client["client\nWDS_SOCKET_PORT=0\nVol: ./client:/app\nAnon Vol: /app/node_modules"]
+        Client["client\nVite Dev Server\nVol: ./client:/app\nAnon Vol: /app/node_modules"]
         API["api\nEnv: REDIS_* & PG*\nVol: ./server:/app\nAnon Vol: /app/node_modules"]
         Worker["worker\nEnv: REDIS_*\nVol: ./worker:/app\nAnon Vol: /app/node_modules"]
         PG[("postgres\nPOSTGRES_PASSWORD")]
@@ -235,7 +234,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     Trigger(["Push / PR to 'main'\nor Manual Dispatch"]) --> Checkout["1. Checkout Repo"]
-    Checkout --> Test["2. Build client/Dockerfile.dev\n& Run Jest Tests (CI=true)"]
+    Checkout --> Test["2. Build client/Dockerfile.dev\n& Run Vitest Tests (CI=true)"]
     Test --> Build["3. Build 4 Prod Images in Parallel\n(client, nginx, server, worker)"]
 ```
 
@@ -269,8 +268,8 @@ flowchart TB
         end
 
         subgraph ClientBox["Container: client (Dockerfile.dev / Prod Multi-Stage)"]
-            C3000["Port 3000\nDev: CRA Dev Server (WDS_SOCKET_PORT=0)\nProd: Nginx serving /app/build"]
-            CRouter["App.js (BrowserRouter)\n/ -> Fib.js | /otherpage -> OtherPage.js"]
+            C3000["Port 3000\nDev: Vite Dev Server\nProd: Nginx serving /app/dist"]
+            CRouter["App.jsx (BrowserRouter)\n/ -> Fib.jsx | /otherpage -> OtherPage.jsx"]
             C3000 --> CRouter
         end
 
@@ -414,14 +413,16 @@ docker-k8s/
     │   ├── Dockerfile                        # Production Nginx proxy image
     │   └── Dockerfile.dev                    # Development Nginx proxy image
     ├── client/
-    │   ├── Dockerfile                        # Multi-stage React build -> Nginx (:3000)
-    │   ├── Dockerfile.dev                    # React development server image
+    │   ├── vite.config.js                    # Vite dev server, build & Vitest config
+    │   ├── index.html                        # Vite SPA entry HTML
+    │   ├── Dockerfile                        # Multi-stage Vite build -> Nginx (:3000)
+    │   ├── Dockerfile.dev                    # Vite development server image
     │   ├── nginx/default.conf                # Production SPA static server config (try_files)
     │   └── src/
-    │       ├── index.js                      # React 18 root entry point
-    │       ├── App.js                        # Client-side router & layout
-    │       ├── Fib.js                        # Fibonacci form, API fetches, and results display
-    │       └── OtherPage.js                  # Secondary route to verify SPA routing
+    │       ├── index.jsx                     # React 18 root entry point
+    │       ├── App.jsx                       # Client-side router & layout
+    │       ├── Fib.jsx                       # Fibonacci form, API fetches, and results display
+    │       └── OtherPage.jsx                 # Secondary route to verify SPA routing
     ├── server/
     │   ├── Dockerfile                        # Production Express API image
     │   ├── Dockerfile.dev                    # Development Express API image (nodemon)

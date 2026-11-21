@@ -7,7 +7,7 @@ WORKDIR '/app'
 COPY ./package.json ./
 RUN npm install
 
-# Copy the rest of the React source code and generate the optimized static build in /app/build.
+# Copy the rest of the React source code and generate the optimized static Vite build in /app/dist.
 COPY . .
 RUN npm run build
 
@@ -22,4 +22,4 @@ EXPOSE 3000
 COPY ./nginx/default.conf /etc/nginx/conf.d/default.conf
 
 # Copy the compiled React static files from the builder stage into Nginx's web root.
-COPY --from=builder /app/build /usr/share/nginx/html
+COPY --from=builder /app/dist /usr/share/nginx/html
