@@ -394,6 +394,8 @@ sequenceDiagram
 
 ### Running Locally with Docker Compose
 
+For full installation, testing, production build, and troubleshooting instructions, see [SETUP.md](./SETUP.md).
+
 ```bash
 # Build images and start all 6 containers
 docker compose up --build
