@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
 // Main Fibonacci calculator component: lets users submit indexes and displays both
@@ -10,75 +10,170 @@ const Fib = () => {
   const [values, setValues] = useState({});
   // Controlled input state for the index form field
   const [index, setIndex] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  // Requests calculated index->value pairs from Redis (routed through Nginx '/api' -> Express '/values/current').
+  const fetchValues = useCallback(async () => {
+    const res = await axios.get("/api/values/current");
+    setValues(res.data || {});
+  }, []);
+
+  // Requests all previously submitted indexes from PostgreSQL (routed through Nginx '/api' -> Express '/values/all').
+  const fetchIndexes = useCallback(async () => {
+    const res = await axios.get("/api/values/all");
+    setSeenIndexes(Array.isArray(res.data) ? res.data : []);
+  }, []);
+
+  const refreshData = useCallback(async () => {
+    try {
+      await Promise.all([fetchValues(), fetchIndexes()]);
+    } catch (err) {
+      // Ignore transient load errors until services finish booting
+    }
+  }, [fetchValues, fetchIndexes]);
 
   // Fetch initial data from both data stores (via the Express API) once when the component mounts.
   useEffect(() => {
-    fetchValues();
-    fetchIndexes();
-  }, []);
-
-  // Requests calculated index->value pairs from Redis (routed through Nginx '/api' -> Express '/values/current').
-  const fetchValues = async () => {
-    const values = await axios.get("/api/values/current");
-    setValues(values.data);
-  };
-
-  // Requests all previously submitted indexes from PostgreSQL (routed through Nginx '/api' -> Express '/values/all').
-  const fetchIndexes = async () => {
-    const seenIndexes = await axios.get("/api/values/all");
-    setSeenIndexes(seenIndexes.data);
-  };
+    refreshData();
+  }, [refreshData]);
 
   // Submits a new index to Express, which records it in Postgres and triggers async calculation via Redis Pub/Sub.
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    await axios.post("/api/values", {
-      index: index,
-    });
-    // Clear the input field after submission (reload page to fetch newly computed worker result).
-    setIndex("");
-  };
-
-  // Formats the Postgres rows into a comma-separated list of seen indexes.
-  const renderSeenIndexes = () => {
-    return seenIndexes.map(({ number }) => number).join(", ");
-  };
-
-  // Renders one line per key-value entry retrieved from the Redis 'values' hash.
-  const renderValues = () => {
-    const entries = [];
-
-    for (let key in values) {
-      entries.push(
-        <div key={key}>
-          For index {key} I calculated {values[key]}
-        </div>
-      );
+    const trimmed = index.trim();
+    if (!trimmed) {
+      return;
     }
 
-    return entries;
+    setError("");
+    setSubmitting(true);
+    try {
+      await axios.post("/api/values", { index: trimmed });
+      setIndex("");
+      await refreshData();
+      // Poll once more shortly after so async worker results appear without manual reload
+      setTimeout(() => {
+        refreshData();
+      }, 600);
+    } catch (err) {
+      const message =
+        err?.response?.data || "Unable to submit index. Please try again.";
+      setError(typeof message === "string" ? message : "Submission failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const sortedEntries = Object.entries(values).sort(
+    ([a], [b]) => Number(a) - Number(b)
+  );
 
   return (
     <div>
+      <div className="page-header">
+        <h1>Fibonacci Calculator</h1>
+        <p className="page-subtitle">
+          Submit an index to compute its Fibonacci number asynchronously via
+          Redis Pub/Sub and record history in PostgreSQL.
+        </p>
+      </div>
+
       {/* Form to submit a new Fibonacci index (indexes > 40 are rejected by the API with HTTP 422) */}
-      <form onSubmit={handleSubmit}>
-        <label>Enter your index:</label>
-        <input
-          value={index}
-          onChange={(event) => setIndex(event.target.value)}
-        />
-        <button>Submit</button>
-      </form>
+      <section className="card">
+        <form className="fib-form" onSubmit={handleSubmit}>
+          <div className="form-field">
+            <label htmlFor="fib-index" className="form-label">
+              Enter your index
+            </label>
+            <input
+              id="fib-index"
+              type="number"
+              min="0"
+              max="40"
+              className="form-input"
+              placeholder="e.g. 7 (max 40)"
+              value={index}
+              onChange={(event) => setIndex(event.target.value)}
+            />
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting || index.trim() === ""}
+          >
+            {submitting ? "Calculating..." : "Calculate"}
+          </button>
+        </form>
+        <p className="form-hint">
+          Values above 40 are capped by the API to keep recursive worker
+          calculations fast.
+        </p>
+        {error && (
+          <div className="alert-error" role="alert">
+            {error}
+          </div>
+        )}
+      </section>
 
       {/* Historical indexes persisted in PostgreSQL */}
-      <h3>Indexes I have seen:</h3>
-      {renderSeenIndexes()}
+      <section className="card">
+        <div className="card-header">
+          <h2 className="card-title">
+            Indexes I have seen
+            <span className="badge badge-purple">PostgreSQL</span>
+          </h2>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={refreshData}
+          >
+            Refresh
+          </button>
+        </div>
+        {seenIndexes.length > 0 ? (
+          <div className="index-list">
+            {seenIndexes.map(({ number }, idx) => (
+              <span key={`${number}-${idx}`} className="index-chip">
+                {number}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-state">No indexes submitted yet.</p>
+        )}
+      </section>
 
       {/* Calculated Fibonacci results cached in Redis by the background worker */}
-      <h3>Calculated Values:</h3>
-      {renderValues()}
+      <section className="card">
+        <div className="card-header">
+          <h2 className="card-title">
+            Calculated Values
+            <span className="badge">Redis</span>
+          </h2>
+        </div>
+        {sortedEntries.length > 0 ? (
+          <div className="values-grid">
+            {sortedEntries.map(([key, val]) => {
+              const isPending = val === "Nothing yet!";
+              return (
+                <div key={key} className="value-item">
+                  <span className="value-key">fib({key})</span>
+                  <span
+                    className={isPending ? "value-pending" : "value-result"}
+                  >
+                    {val}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="empty-state">
+            Submit an index above to calculate its Fibonacci value.
+          </p>
+        )}
+      </section>
     </div>
   );
 };

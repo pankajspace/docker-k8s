@@ -1,7 +1,12 @@
 import React from "react";
-import logo from "./logo.svg";
 import "./App.css";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  NavLink,
+  Link,
+} from "react-router-dom";
 import OtherPage from "./OtherPage";
 import Fib from "./Fib";
 
@@ -9,29 +14,46 @@ import Fib from "./Fib";
 function App() {
   return (
     <Router>
-      <div className="App">
-        <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-          <a
-            className="App-link"
-            href="https://reactjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn React
-          </a>
-          {/* Client-side navigation links handled without full page reloads */}
-          <Link to="/">Home</Link>
-          <Link to="/otherpage">Other Page</Link>
+      <div className="app-shell">
+        <header className="navbar">
+          <div className="navbar-inner">
+            <Link to="/" className="brand">
+              <span className="brand-mark">F</span>
+              <span>Fibonacci Calculator</span>
+            </Link>
+
+            {/* Client-side navigation links handled without full page reloads */}
+            <nav className="nav-links" aria-label="Primary navigation">
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) =>
+                  isActive ? "nav-link active" : "nav-link"
+                }
+              >
+                Calculator
+              </NavLink>
+              <NavLink
+                to="/otherpage"
+                className={({ isActive }) =>
+                  isActive ? "nav-link active" : "nav-link"
+                }
+              >
+                Other Page
+              </NavLink>
+            </nav>
+          </div>
         </header>
 
-        {/* Maps URL paths to their corresponding React view components */}
-        <Routes>
-          {/* Main Fibonacci calculator view */}
-          <Route path="/" element={<Fib />} />
-          {/* Secondary route used to verify SPA routing (and Nginx try_files fallback in prod) */}
-          <Route path="/otherpage" element={<OtherPage />} />
-        </Routes>
+        <main className="main-content">
+          {/* Maps URL paths to their corresponding React view components */}
+          <Routes>
+            {/* Main Fibonacci calculator view */}
+            <Route path="/" element={<Fib />} />
+            {/* Secondary route used to verify SPA routing (and Nginx try_files fallback in prod) */}
+            <Route path="/otherpage" element={<OtherPage />} />
+          </Routes>
+        </main>
       </div>
     </Router>
   );
