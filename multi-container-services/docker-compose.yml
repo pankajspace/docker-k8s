@@ -1,52 +1,81 @@
+# Docker Compose configuration for local development of the multi-container Fibonacci app.
+# All services defined here automatically join a shared default bridge network and can
+# reach one another using their service names (postgres, redis, api, client, worker) as hostnames.
 version: '3'
+
 services:
+  # Relational database storing a permanent history of all submitted Fibonacci indexes.
   postgres:
     image: 'postgres:latest'
     environment:
+      # Default superuser password required by the official Postgres image (internal port 5432).
       - POSTGRES_PASSWORD=postgres_password
+
+  # In-memory key-value store (calculated Fibonacci hash) and Pub/Sub message broker (internal port 6379).
   redis:
     image: 'redis:latest'
+
+  # Reverse proxy acting as the single public entry point for both frontend and backend traffic.
   nginx:
+    # Ensures api and client containers are started before nginx attempts to route traffic to them.
     depends_on:
       - api
       - client
+    # Automatically restart nginx if it exits (e.g., if upstream services aren't ready on first boot).
     restart: always
     build:
       dockerfile: Dockerfile.dev
       context: ./nginx
     ports:
+      # Maps host port 3050 to container port 80 (access the app at http://localhost:3050).
       - '3050:80'
+
+  # Express REST API server (container port 5000) coordinating requests between Postgres and Redis.
   api:
     build:
       dockerfile: Dockerfile.dev
       context: ./server
     volumes:
+      # Anonymous volume preserves the container's installed node_modules from being overwritten by the bind mount.
       - /app/node_modules
+      # Bind mount syncs local ./server source changes into the container for live reload with nodemon.
       - ./server:/app
     environment:
+      # Redis connection settings using the 'redis' Docker service name as hostname.
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # PostgreSQL connection settings using the 'postgres' Docker service name as hostname.
       - PGUSER=postgres
       - PGHOST=postgres
       - PGDATABASE=postgres
       - PGPASSWORD=postgres_password
       - PGPORT=5432
+
+  # React Single-Page Application dev server (container port 3000).
   client:
     environment:
+      # Tells Webpack Dev Server to use the browser's current port (3050 via Nginx) for WebSocket HMR connections.
       - WDS_SOCKET_PORT=0
     build:
       dockerfile: Dockerfile.dev
       context: ./client
     volumes:
+      # Preserves container-installed node_modules.
       - /app/node_modules
+      # Syncs local ./client source files for instant hot-reloading.
       - ./client:/app
+
+  # Background worker subscribed to Redis 'insert' events to asynchronously calculate Fibonacci values.
   worker:
     build:
       dockerfile: Dockerfile.dev
       context: ./worker
     volumes:
+      # Preserves container-installed node_modules.
       - /app/node_modules
+      # Syncs local ./worker source files for live reload with nodemon.
       - ./worker:/app
     environment:
+      # Redis connection settings using the 'redis' Docker service name as hostname.
       - REDIS_HOST=redis
       - REDIS_PORT=6379
