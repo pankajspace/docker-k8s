@@ -330,6 +330,7 @@ flowchart TB
 The sequence below traces a complete user lifecycle: loading the app, submitting a new index (e.g., `7`), background calculation by the worker, and viewing the updated result on refresh.
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'darkMode': true, 'background': '#0d1117', 'primaryColor': '#1f2937', 'primaryTextColor': '#f3f4f6', 'primaryBorderColor': '#4b5563', 'lineColor': '#9ca3af', 'actorBkg': '#1e293b', 'actorBorder': '#60a5fa', 'actorTextColor': '#f8fafc', 'actorLineColor': '#64748b', 'signalColor': '#e5e7eb', 'signalTextColor': '#f3f4f6', 'labelBoxBkgColor': '#1e293b', 'labelBoxBorderColor': '#475569', 'labelTextColor': '#f8fafc', 'noteBkgColor': '#334155', 'noteTextColor': '#f8fafc', 'noteBorderColor': '#64748b' }}}%%
 sequenceDiagram
     autonumber
     actor User as Browser
@@ -340,7 +341,7 @@ sequenceDiagram
     participant Redis as Redis (:6379)
     participant Worker as Worker (Node.js)
 
-    rect rgb(235, 245, 255)
+    rect rgb(23, 37, 64)
         Note over User,Redis: Phase 1: Initial Page Load
         User->>Nginx: GET /
         Nginx->>Client: Proxy to http://client:3000/
@@ -361,7 +362,7 @@ sequenceDiagram
         end
     end
 
-    rect rgb(240, 255, 240)
+    rect rgb(20, 48, 36)
         Note over User,Worker: Phase 2: Submitting a New Index (e.g., index = "7")
         User->>Nginx: POST /api/values { "index": "7" }
         Nginx->>API: Rewrite & Proxy -> POST /values
@@ -377,7 +378,7 @@ sequenceDiagram
         Worker->>Redis: HSET values "7" 21
     end
 
-    rect rgb(255, 248, 235)
+    rect rgb(54, 36, 22)
         Note over User,Redis: Phase 3: User Refreshes Page
         User->>Nginx: GET /api/values/all & GET /api/values/current
         Nginx->>API: Forward requests
