@@ -230,7 +230,7 @@ flowchart TB
 > **Why mount `/app/node_modules` as an anonymous volume?**
 > Mounting `./server:/app` enables live code reloading with `nodemon`, but would otherwise overwrite the container's Linux-built `node_modules` directory with the host's folder. Declaring `- /app/node_modules` pins the container's installed dependencies inside the container.
 
-#### CI/CD Deployment Pipeline (`.github/workflows/deploy.yaml`)
+#### CI/CD Deployment Pipeline (`../.github/workflows/multi-container-services-deploy.yaml`)
 
 ```mermaid
 flowchart LR
@@ -407,30 +407,32 @@ docker compose up --build
 ### Project Directory Map
 
 ```text
-multi-container-services/
-├── docker-compose.yml              # Local multi-container dev orchestration
-├── .github/workflows/deploy.yaml   # CI/CD: test, build/push images, deploy to AWS EB
-├── nginx/
-│   ├── default.conf                # Reverse proxy rules (/, /ws, /api)
-│   ├── Dockerfile                  # Production Nginx proxy image
-│   └── Dockerfile.dev              # Development Nginx proxy image
-├── client/
-│   ├── Dockerfile                  # Multi-stage React build -> Nginx (:3000)
-│   ├── Dockerfile.dev              # React development server image
-│   ├── nginx/default.conf          # Production SPA static server config (try_files)
-│   └── src/
-│       ├── index.js                # React 18 root entry point
-│       ├── App.js                  # Client-side router & layout
-│       ├── Fib.js                  # Fibonacci form, API fetches, and results display
-│       └── OtherPage.js            # Secondary route to verify SPA routing
-├── server/
-│   ├── Dockerfile                  # Production Express API image
-│   ├── Dockerfile.dev              # Development Express API image (nodemon)
-│   ├── keys.js                     # Env-var config for Redis & Postgres
-│   └── index.js                    # Express routes, Postgres Pool, Redis client/publisher
-└── worker/
-    ├── Dockerfile                  # Production Worker image
-    ├── Dockerfile.dev              # Development Worker image (nodemon)
-    ├── keys.js                     # Env-var config for Redis
-    └── index.js                    # Redis subscriber & recursive Fibonacci calculator
+docker-k8s/
+├── .github/workflows/
+│   └── multi-container-services-deploy.yaml  # CI/CD: test, build/push images, deploy to AWS EB
+└── multi-container-services/
+    ├── docker-compose.yml                    # Local multi-container dev orchestration
+    ├── nginx/
+    │   ├── default.conf                      # Reverse proxy rules (/, /ws, /api)
+    │   ├── Dockerfile                        # Production Nginx proxy image
+    │   └── Dockerfile.dev                    # Development Nginx proxy image
+    ├── client/
+    │   ├── Dockerfile                        # Multi-stage React build -> Nginx (:3000)
+    │   ├── Dockerfile.dev                    # React development server image
+    │   ├── nginx/default.conf                # Production SPA static server config (try_files)
+    │   └── src/
+    │       ├── index.js                      # React 18 root entry point
+    │       ├── App.js                        # Client-side router & layout
+    │       ├── Fib.js                        # Fibonacci form, API fetches, and results display
+    │       └── OtherPage.js                  # Secondary route to verify SPA routing
+    ├── server/
+    │   ├── Dockerfile                        # Production Express API image
+    │   ├── Dockerfile.dev                    # Development Express API image (nodemon)
+    │   ├── keys.js                           # Env-var config for Redis & Postgres
+    │   └── index.js                          # Express routes, Postgres Pool, Redis client/publisher
+    └── worker/
+        ├── Dockerfile                        # Production Worker image
+        ├── Dockerfile.dev                    # Development Worker image (nodemon)
+        ├── keys.js                           # Env-var config for Redis
+        └── index.js                          # Redis subscriber & recursive Fibonacci calculator
 ```

@@ -110,7 +110,7 @@ docker compose down -v
 
 ### Option A: Run Client Tests via Docker (Matches CI Pipeline)
 
-This mirrors `.github/workflows/deploy.yaml`:
+This mirrors `../.github/workflows/multi-container-services-deploy.yaml`:
 
 ```bash
 docker build -t multi-client-test -f ./client/Dockerfile.dev ./client
