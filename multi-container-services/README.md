@@ -16,7 +16,7 @@ A multi-container Fibonacci calculator web application built to demonstrate **Do
    - [2.3 Express API Server (`server/`)](#23-express-api-server-server)
    - [2.4 Background Fibonacci Worker (`worker/`)](#24-background-fibonacci-worker-worker)
    - [2.5 Data Layer (PostgreSQL & Redis)](#25-data-layer-postgresql--redis)
-   - [2.6 Docker Compose & CI/CD Pipeline](#26-docker-compose--cicd-pipeline)
+   - [2.6 Docker Compose & CI Pipeline](#26-docker-compose--ci-pipeline)
 3. [Detailed Architecture & End-to-End Flows](#3-detailed-architecture--end-to-end-flows)
    - [3.1 Detailed System Architecture](#31-detailed-system-architecture)
    - [3.2 End-to-End Request & Event Sequence](#32-end-to-end-request--event-sequence)
@@ -205,7 +205,7 @@ flowchart TB
 
 ---
 
-### 2.6 Docker Compose & CI/CD Pipeline
+### 2.6 Docker Compose & CI Pipeline
 
 #### Local Development Orchestration (`docker-compose.yml`)
 
@@ -230,16 +230,13 @@ flowchart TB
 > **Why mount `/app/node_modules` as an anonymous volume?**
 > Mounting `./server:/app` enables live code reloading with `nodemon`, but would otherwise overwrite the container's Linux-built `node_modules` directory with the host's folder. Declaring `- /app/node_modules` pins the container's installed dependencies inside the container.
 
-#### CI/CD Deployment Pipeline (`../.github/workflows/multi-container-services-deploy.yaml`)
+#### CI Pipeline (`../.github/workflows/multi-container-services.yaml`)
 
 ```mermaid
 flowchart LR
-    Push(["Git Push to 'main'"]) --> Checkout["1. Checkout Repo\n& Docker Hub Login"]
+    Trigger(["Push / PR to 'main'\nor Manual Dispatch"]) --> Checkout["1. Checkout Repo"]
     Checkout --> Test["2. Build client/Dockerfile.dev\n& Run Jest Tests (CI=true)"]
-    Test --> Build["3. Build 4 Prod Images\n(client, nginx, server, worker)"]
-    Build --> PushHub["4. Push Images to\nDocker Hub"]
-    PushHub --> Zip["5. Package Source\ninto deploy.zip"]
-    Zip --> EB["6. Deploy to AWS\nElastic Beanstalk\n(multi-docker / us-east-1)"]
+    Test --> Build["3. Build 4 Prod Images in Parallel\n(client, nginx, server, worker)"]
 ```
 
 ---
@@ -409,7 +406,7 @@ docker compose up --build
 ```text
 docker-k8s/
 ├── .github/workflows/
-│   └── multi-container-services-deploy.yaml  # CI/CD: test, build/push images, deploy to AWS EB
+│   └── multi-container-services.yaml         # CI: run client tests & verify prod Docker builds
 └── multi-container-services/
     ├── docker-compose.yml                    # Local multi-container dev orchestration
     ├── nginx/
