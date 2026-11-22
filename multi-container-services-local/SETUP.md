@@ -108,9 +108,7 @@ docker compose down -v
 
 ## 5. Running Tests
 
-### Option A: Run Client Tests via Docker (Matches CI Pipeline)
-
-This mirrors `../.github/workflows/multi-container-services-local.yaml`:
+### Option A: Run Client Tests via Docker
 
 ```bash
 docker build -t multi-client-test -f ./client/Dockerfile.dev ./client
