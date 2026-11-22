@@ -1,6 +1,6 @@
 # Installation & Running Guide
 
-This guide covers how to set up, run, test, and build the **multi-container-services** Fibonacci calculator application locally using Docker Compose.
+This guide covers how to set up, run, test, and build the **multi-container-services-local** Fibonacci calculator application locally using Docker Compose.
 
 For a detailed breakdown of the system design and diagrams, see [README.md](./README.md).
 
@@ -30,7 +30,7 @@ docker compose version
 Navigate into the project directory:
 
 ```bash
-cd /path/to/docker-k8s/multi-container-services
+cd /path/to/docker-k8s/multi-container-services-local
 ```
 
 You do **not** need to run `npm install` manually on your host machine when running via Docker Compose—each service installs its own Node.js dependencies inside its container image and preserves them using an anonymous `/app/node_modules` volume.
@@ -110,7 +110,7 @@ docker compose down -v
 
 ### Option A: Run Client Tests via Docker (Matches CI Pipeline)
 
-This mirrors `../.github/workflows/multi-container-services.yaml`:
+This mirrors `../.github/workflows/multi-container-services-local.yaml`:
 
 ```bash
 docker build -t multi-client-test -f ./client/Dockerfile.dev ./client

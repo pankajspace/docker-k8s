@@ -229,7 +229,7 @@ flowchart TB
 > **Why mount `/app/node_modules` as an anonymous volume?**
 > Mounting `./server:/app` enables live code reloading with `nodemon`, but would otherwise overwrite the container's Linux-built `node_modules` directory with the host's folder. Declaring `- /app/node_modules` pins the container's installed dependencies inside the container.
 
-#### CI Pipeline (`../.github/workflows/multi-container-services.yaml`)
+#### CI Pipeline (`../.github/workflows/multi-container-services-local.yaml`)
 
 ```mermaid
 flowchart LR
@@ -405,8 +405,8 @@ docker compose up --build
 ```text
 docker-k8s/
 ├── .github/workflows/
-│   └── multi-container-services.yaml         # CI: run client tests & verify prod Docker builds
-└── multi-container-services/
+│   └── multi-container-services-local.yaml   # CI: run client tests & verify prod Docker builds
+└── multi-container-services-local/
     ├── docker-compose.yml                    # Local multi-container dev orchestration
     ├── nginx/
     │   ├── default.conf                      # Reverse proxy rules (/, /ws, /api)
