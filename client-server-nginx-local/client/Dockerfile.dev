@@ -1,0 +1,13 @@
+# Development Dockerfile for the React frontend (used by docker-compose.yml and CI tests).
+FROM node:lts-alpine
+WORKDIR '/app'
+
+# Copy package.json first so Docker caches 'npm install' across source-code-only edits.
+COPY ./package.json ./
+RUN npm install
+
+# Copy the remaining application source code (overridden at runtime by a bind mount in docker-compose.yml).
+COPY . .
+
+# Start Vite's live-reloading development server on port 3000.
+CMD ["npm", "run", "start"]
