@@ -111,7 +111,7 @@ docker compose down -v
 
 ```bash
 docker build -t csn-client-test -f ./client/Dockerfile.dev ./client
-docker run -e CI=true csn-client-test npm test
+docker run csn-client-test npm test
 ```
 
 ### Option B: Run Client Tests Locally (Requires Node.js)
@@ -119,7 +119,7 @@ docker run -e CI=true csn-client-test npm test
 ```bash
 cd client
 npm install
-CI=true npm test
+npm test
 ```
 
 ---
