@@ -1,22 +1,31 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
-import axios from "axios";
+import { afterEach, beforeEach, vi } from "vitest";
 import App from "./App";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(() =>
-      Promise.resolve({ data: { seenIndexes: [], calculatedValues: {} } })
-    ),
-    post: vi.fn(() =>
-      Promise.resolve({
-        data: { seenIndexes: [7], calculatedValues: { 7: 21 } },
-      })
-    ),
-  },
-}));
+const mockFetch = vi.fn();
+
+beforeEach(() => {
+  mockFetch.mockImplementation((url, options) => {
+    if (options?.method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ seenIndexes: [7], calculatedValues: { 7: 21 } }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ seenIndexes: [], calculatedValues: {} }),
+    });
+  });
+  vi.stubGlobal("fetch", mockFetch);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  mockFetch.mockReset();
+});
 
 test("renders Fibonacci Calculator heading, form, and updates from POST response", async () => {
   const user = userEvent.setup();
@@ -24,18 +33,26 @@ test("renders Fibonacci Calculator heading, form, and updates from POST response
   expect(
     await screen.findByRole("heading", { name: /fibonacci calculator/i })
   ).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /^calculator$/i })).toHaveClass(
+    "nav-link",
+    "active"
+  );
   const input = screen.getByLabelText(/enter your index/i);
   const button = screen.getByRole("button", { name: /calculate/i });
   expect(input).toBeInTheDocument();
   expect(button).toBeInTheDocument();
-  expect(axios.get).toHaveBeenCalledTimes(1);
-  expect(axios.get).toHaveBeenCalledWith("/api/values");
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  expect(mockFetch).toHaveBeenCalledWith("/api/values");
 
   await user.type(input, "7");
   await user.click(button);
 
-  expect(axios.post).toHaveBeenCalledWith("/api/values", { index: "7" });
-  expect(axios.get).toHaveBeenCalledTimes(1);
+  expect(mockFetch).toHaveBeenCalledTimes(2);
+  expect(mockFetch).toHaveBeenNthCalledWith(2, "/api/values", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index: "7" }),
+  });
   expect(await screen.findByText("fib(7)")).toBeInTheDocument();
   expect(screen.getByText("21")).toBeInTheDocument();
 });

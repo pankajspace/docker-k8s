@@ -1,11 +1,11 @@
 # --- Stage 1: Build Stage ---
 # Use a lightweight Node.js Alpine image to install dependencies and compile the React production bundle.
-FROM node:lts-alpine as builder
+FROM node:lts-alpine AS builder
 WORKDIR '/app'
 
-# Copy package.json first to leverage Docker layer caching when dependencies haven't changed.
-COPY ./package.json ./
-RUN npm install
+# Copy package manifests first to leverage Docker layer caching when dependencies haven't changed.
+COPY ./package*.json ./
+RUN npm ci
 
 # Copy the rest of the React source code and generate the optimized static Vite build in /app/dist.
 COPY . .
@@ -13,7 +13,7 @@ RUN npm run build
 
 # --- Stage 2: Production Runtime Stage ---
 # Use a minimal Nginx image to serve only the compiled static assets (discarding Node.js & node_modules).
-FROM nginx
+FROM nginx:alpine
 
 # Document that this container serves the React SPA on port 3000 (matching the outer Nginx upstream).
 EXPOSE 3000

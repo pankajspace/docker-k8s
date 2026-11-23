@@ -2,9 +2,9 @@
 FROM node:lts-alpine
 WORKDIR '/app'
 
-# Copy package.json first so Docker caches 'npm install' across source-code-only edits.
-COPY ./package.json ./
-RUN npm install
+# Copy package manifests first so Docker caches dependency installation across source-code-only edits.
+COPY ./package*.json ./
+RUN npm ci
 
 # Copy the remaining application source code (overridden at runtime by a bind mount in docker-compose.yml).
 COPY . .

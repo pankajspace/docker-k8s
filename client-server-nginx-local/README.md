@@ -28,7 +28,7 @@ flowchart LR
 | Service | Container Role | Tech Stack | Internal Port |
 | :--- | :--- | :--- | :--- |
 | **`nginx`** | Single entry point & HTTP/WS reverse proxy | Nginx (`nginx/default.conf`) | `80` (Host `3050`) |
-| **`client`** | Single-Page Application (SPA) UI (Vite dev server in dev; Nginx serving static bundle in prod) | React 18, Vite, React Router, Axios, Nginx (prod) | `3000` |
+| **`client`** | Single-Page Application (SPA) UI (Vite dev server in dev; Nginx serving static bundle in prod) | React 18, Vite, React Router, Nginx (prod) | `3000` |
 | **`api`** | REST API, Fibonacci calculator, and in-memory storage | Node.js, Express | `5000` |
 
 ### Nginx Inside `client` (Development vs. Production)

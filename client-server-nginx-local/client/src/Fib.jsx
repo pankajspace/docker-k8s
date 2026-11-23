@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import axios from "axios";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 // Main Fibonacci calculator component: lets users submit indexes and displays both
 // historical indexes and calculated values stored in memory on the Node.js server.
@@ -21,9 +20,10 @@ const Fib = () => {
   // Requests both submitted indexes and calculated values in a single call (Nginx '/api' -> Express '/values').
   const refreshData = useCallback(async () => {
     try {
-      const res = await axios.get("/api/values");
-      applyServerData(res.data);
-    } catch (err) {
+      const res = await fetch("/api/values");
+      if (!res.ok) return;
+      applyServerData(await res.json());
+    } catch {
       // Ignore transient load errors until services finish booting
     }
   }, [applyServerData]);
@@ -44,13 +44,20 @@ const Fib = () => {
     setError("");
     setSubmitting(true);
     try {
-      const res = await axios.post("/api/values", { index: trimmed });
+      const res = await fetch("/api/values", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: trimmed }),
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        setError(message || "Unable to submit index. Please try again.");
+        return;
+      }
       setIndex("");
-      applyServerData(res.data);
-    } catch (err) {
-      const message =
-        err?.response?.data || "Unable to submit index. Please try again.";
-      setError(typeof message === "string" ? message : "Submission failed.");
+      applyServerData(await res.json());
+    } catch {
+      setError("Unable to submit index. Please try again.");
     } finally {
       setSubmitting(false);
     }

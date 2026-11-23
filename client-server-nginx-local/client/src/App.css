@@ -306,12 +306,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.value-pending {
-  font-size: 0.84rem;
-  font-weight: 500;
-  color: #fbbf24;
-}
-
 .empty-state {
   margin: 0;
   font-size: 0.9rem;

@@ -1,4 +1,3 @@
-import React from "react";
 import { Link } from "react-router-dom";
 
 // Secondary page demonstrating client-side navigation with React Router.

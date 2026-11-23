@@ -1,4 +1,3 @@
-import React from "react";
 import "./App.css";
 import {
   BrowserRouter as Router,
@@ -24,21 +23,10 @@ function App() {
 
             {/* Client-side navigation links handled without full page reloads */}
             <nav className="nav-links" aria-label="Primary navigation">
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
+              <NavLink to="/" end className="nav-link">
                 Calculator
               </NavLink>
-              <NavLink
-                to="/otherpage"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
+              <NavLink to="/otherpage" className="nav-link">
                 Other Page
               </NavLink>
             </nav>
