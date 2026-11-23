@@ -38,14 +38,9 @@ app.get("/", (req, res) => {
   res.send("Hi");
 });
 
-// Returns every Fibonacci index submitted since server start (GET /api/values/all).
-app.get("/values/all", (req, res) => {
-  res.send(seenIndexes);
-});
-
-// Returns the map of { index: calculatedValue } stored in memory (GET /api/values/current).
-app.get("/values/current", (req, res) => {
-  res.send(calculatedValues);
+// Returns both submitted index history and calculated Fibonacci values (GET /api/values).
+app.get("/values", (req, res) => {
+  res.send({ seenIndexes, calculatedValues });
 });
 
 // Accepts a new Fibonacci index, computes fib(index) on the server, and stores it in memory (POST /api/values).

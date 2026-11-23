@@ -6,8 +6,8 @@ import App from "./App";
 
 vi.mock("axios", () => ({
   default: {
-    get: vi.fn((url) =>
-      Promise.resolve({ data: url === "/api/values/all" ? [] : {} })
+    get: vi.fn(() =>
+      Promise.resolve({ data: { seenIndexes: [], calculatedValues: {} } })
     ),
     post: vi.fn(() => Promise.resolve({ data: { working: true } })),
   },
@@ -22,6 +22,6 @@ test("renders Fibonacci Calculator heading and form", async () => {
   expect(
     screen.getByRole("button", { name: /calculate/i })
   ).toBeInTheDocument();
-  expect(axios.get).toHaveBeenCalledWith("/api/values/current");
-  expect(axios.get).toHaveBeenCalledWith("/api/values/all");
+  expect(axios.get).toHaveBeenCalledTimes(1);
+  expect(axios.get).toHaveBeenCalledWith("/api/values");
 });

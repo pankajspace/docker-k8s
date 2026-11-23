@@ -62,8 +62,7 @@ Once all containers are up:
 - **Web App (React UI):** [http://localhost:3050](http://localhost:3050)
 - **Secondary SPA Route:** [http://localhost:3050/otherpage](http://localhost:3050/otherpage)
 - **API Health Check:** [http://localhost:3050/api/](http://localhost:3050/api/) (returns `Hi`)
-- **Submitted Indexes (In-Memory List):** [http://localhost:3050/api/values/all](http://localhost:3050/api/values/all)
-- **Calculated Values (In-Memory Map):** [http://localhost:3050/api/values/current](http://localhost:3050/api/values/current)
+- **Submitted Indexes & Calculated Values:** [http://localhost:3050/api/values](http://localhost:3050/api/values)
 
 ### Try It Out
 

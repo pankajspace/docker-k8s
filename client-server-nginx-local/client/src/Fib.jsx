@@ -13,25 +13,17 @@ const Fib = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Requests calculated index->value pairs from the server (routed through Nginx '/api' -> Express '/values/current').
-  const fetchValues = useCallback(async () => {
-    const res = await axios.get("/api/values/current");
-    setValues(res.data || {});
-  }, []);
-
-  // Requests all previously submitted indexes from the server (routed through Nginx '/api' -> Express '/values/all').
-  const fetchIndexes = useCallback(async () => {
-    const res = await axios.get("/api/values/all");
-    setSeenIndexes(Array.isArray(res.data) ? res.data : []);
-  }, []);
-
+  // Requests both submitted indexes and calculated values in a single call (Nginx '/api' -> Express '/values').
   const refreshData = useCallback(async () => {
     try {
-      await Promise.all([fetchValues(), fetchIndexes()]);
+      const res = await axios.get("/api/values");
+      const data = res.data || {};
+      setSeenIndexes(Array.isArray(data.seenIndexes) ? data.seenIndexes : []);
+      setValues(data.calculatedValues || {});
     } catch (err) {
       // Ignore transient load errors until services finish booting
     }
-  }, [fetchValues, fetchIndexes]);
+  }, []);
 
   // Fetch initial data from the Express API once when the component mounts.
   useEffect(() => {
