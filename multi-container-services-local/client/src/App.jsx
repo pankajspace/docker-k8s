@@ -1,4 +1,3 @@
-import React from "react";
 import "./App.css";
 import {
   BrowserRouter as Router,
@@ -9,6 +8,9 @@ import {
 } from "react-router-dom";
 import OtherPage from "./OtherPage";
 import Fib from "./Fib";
+
+const navLinkClass = ({ isActive }) =>
+  isActive ? "nav-link active" : "nav-link";
 
 // Root application component configuring client-side SPA routing via React Router.
 function App() {
@@ -24,21 +26,10 @@ function App() {
 
             {/* Client-side navigation links handled without full page reloads */}
             <nav className="nav-links" aria-label="Primary navigation">
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
+              <NavLink to="/" end className={navLinkClass}>
                 Calculator
               </NavLink>
-              <NavLink
-                to="/otherpage"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
+              <NavLink to="/otherpage" className={navLinkClass}>
                 Other Page
               </NavLink>
             </nav>

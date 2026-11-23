@@ -18,9 +18,8 @@ const redisClient = redis.createClient({
 // Once a client enters subscriber mode, it cannot issue normal commands like hSet.
 const sub = redisClient.duplicate();
 
-// Connect both Redis clients before subscribing.
-redisClient.connect();
-sub.connect();
+redisClient.on("error", (err) => console.error("Redis client error:", err));
+sub.on("error", (err) => console.error("Redis subscriber error:", err));
 
 // ============================================================================
 // Fibonacci Calculation
@@ -35,8 +34,13 @@ function fib(index) {
 // ============================================================================
 // Event Subscription
 // ============================================================================
-// Listen on the Redis 'insert' channel for new indexes published by the Express API.
-// For each received index, compute its Fibonacci value and overwrite the 'Nothing yet!' placeholder.
-sub.subscribe("insert", (message) => {
-  redisClient.hSet("values", message, fib(parseInt(message)));
-});
+// Connect both Redis clients, then listen on the 'insert' channel for new indexes
+// published by the Express API and overwrite the 'Nothing yet!' placeholder.
+async function start() {
+  await Promise.all([redisClient.connect(), sub.connect()]);
+  await sub.subscribe("insert", (message) => {
+    redisClient.hSet("values", message, fib(parseInt(message)));
+  });
+}
+
+start().catch((err) => console.error("Worker startup error:", err));

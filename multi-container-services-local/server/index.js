@@ -4,14 +4,13 @@ const keys = require("./keys");
 // Express App Setup
 // ============================================================================
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
 
 const app = express();
 // Allow cross-origin requests (useful if the API is accessed directly outside Nginx).
 app.use(cors());
 // Parse incoming JSON request bodies (e.g., { index: "7" } on POST /values).
-app.use(bodyParser.json());
+app.use(express.json());
 
 // ============================================================================
 // PostgreSQL Client Setup
@@ -37,7 +36,7 @@ pgClient.on("connect", (client) => {
 // Redis Client Setup
 // ============================================================================
 const redis = require("redis");
-// Primary Redis client for standard read/write commands (hGetAll, hSet).
+// Primary Redis client for standard read/write commands (hGetAll, hSet) and publishing events.
 const redisClient = redis.createClient({
   socket: {
     host: keys.redisHost,
@@ -47,13 +46,10 @@ const redisClient = redis.createClient({
   },
 });
 
-// Dedicated duplicate connection for Pub/Sub publishing; Redis recommends keeping
-// Pub/Sub connections separate from normal command connections.
-const redisPublisher = redisClient.duplicate();
+redisClient.on("error", (err) => console.error("Redis error:", err));
 
-// Establish connections to Redis (required in redis v4+).
+// Establish connection to Redis (required in redis v4+).
 redisClient.connect();
-redisPublisher.connect();
 
 // ============================================================================
 // Express Route Handlers
@@ -89,16 +85,17 @@ app.post("/values", async (req, res) => {
 
   // 1. Store a placeholder in the Redis 'values' hash until the worker finishes computing fib(index).
   await redisClient.hSet("values", index, "Nothing yet!");
-  // 2. Publish an 'insert' event so the background worker picks up the index asynchronously.
-  await redisPublisher.publish("insert", index);
-  // 3. Permanently record the submitted index in PostgreSQL.
-  pgClient.query("INSERT INTO values(number) VALUES($1)", [index]);
+  // 2. Publish an 'insert' event for the worker and permanently record the index in PostgreSQL in parallel.
+  await Promise.all([
+    redisClient.publish("insert", index),
+    pgClient.query("INSERT INTO values(number) VALUES($1)", [index]),
+  ]);
 
   // Respond immediately without blocking on the background calculation.
   res.send({ working: true });
 });
 
 // Start listening on internal port 5000 (targeted by Nginx's 'api:5000' upstream).
-app.listen(5000, (err) => {
+app.listen(5000, () => {
   console.log("Listening");
 });

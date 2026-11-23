@@ -2,9 +2,9 @@
 FROM node:lts-alpine
 WORKDIR "/app"
 
-# Copy package.json first to leverage Docker layer caching during dependency installation.
-COPY ./package.json ./
-RUN npm install
+# Copy package manifests first to leverage Docker layer caching during dependency installation.
+COPY ./package*.json ./
+RUN npm ci --omit=dev
 
 # Copy the server source code into the image.
 COPY . .

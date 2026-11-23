@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import axios from "axios";
 
 // Main Fibonacci calculator component: lets users submit indexes and displays both
@@ -12,30 +12,26 @@ const Fib = () => {
   const [index, setIndex] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const pollTimerRef = useRef(null);
 
-  // Requests calculated index->value pairs from Redis (routed through Nginx '/api' -> Express '/values/current').
-  const fetchValues = useCallback(async () => {
-    const res = await axios.get("/api/values/current");
-    setValues(res.data || {});
-  }, []);
-
-  // Requests all previously submitted indexes from PostgreSQL (routed through Nginx '/api' -> Express '/values/all').
-  const fetchIndexes = useCallback(async () => {
-    const res = await axios.get("/api/values/all");
-    setSeenIndexes(Array.isArray(res.data) ? res.data : []);
-  }, []);
-
+  // Requests calculated values (Redis) and submitted indexes (PostgreSQL) in parallel.
   const refreshData = useCallback(async () => {
     try {
-      await Promise.all([fetchValues(), fetchIndexes()]);
-    } catch (err) {
+      const [valuesRes, indexesRes] = await Promise.all([
+        axios.get("/api/values/current"),
+        axios.get("/api/values/all"),
+      ]);
+      setValues(valuesRes.data || {});
+      setSeenIndexes(Array.isArray(indexesRes.data) ? indexesRes.data : []);
+    } catch {
       // Ignore transient load errors until services finish booting
     }
-  }, [fetchValues, fetchIndexes]);
+  }, []);
 
-  // Fetch initial data from both data stores (via the Express API) once when the component mounts.
+  // Fetch initial data on mount and clean up any pending post-submit refresh timer on unmount.
   useEffect(() => {
     refreshData();
+    return () => clearTimeout(pollTimerRef.current);
   }, [refreshData]);
 
   // Submits a new index to Express, which records it in Postgres and triggers async calculation via Redis Pub/Sub.
@@ -53,9 +49,8 @@ const Fib = () => {
       setIndex("");
       await refreshData();
       // Poll once more shortly after so async worker results appear without manual reload
-      setTimeout(() => {
-        refreshData();
-      }, 600);
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = setTimeout(refreshData, 600);
     } catch (err) {
       const message =
         err?.response?.data || "Unable to submit index. Please try again.";
@@ -65,8 +60,9 @@ const Fib = () => {
     }
   };
 
-  const sortedEntries = Object.entries(values).sort(
-    ([a], [b]) => Number(a) - Number(b)
+  const sortedEntries = useMemo(
+    () => Object.entries(values).sort(([a], [b]) => Number(a) - Number(b)),
+    [values]
   );
 
   return (
