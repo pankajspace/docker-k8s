@@ -1,0 +1,23 @@
+# Caddy reverse proxy configuration for the Express API on AWS EC2.
+# Caddy automatically provisions and renews Let's Encrypt HTTPS certificates
+# for {$API_DOMAIN} as long as DNS (A record) points to this EC2 Elastic IP
+# and ports 80 & 443 are open in the EC2 Security Group.
+
+# Optional: uncomment and set ACME_EMAIL in ec2/.env to receive Let's Encrypt expiry notices.
+# {
+#     email {$ACME_EMAIL}
+# }
+
+{$API_DOMAIN} {
+    encode zstd gzip
+
+    reverse_proxy api:5000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
