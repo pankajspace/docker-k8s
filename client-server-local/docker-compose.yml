@@ -1,0 +1,41 @@
+# Docker Compose configuration for local development of the minimal 2-service Fibonacci app
+# (React client and Express API server with in-memory storage, without an Nginx reverse proxy).
+# Both services expose their ports directly to the host so the browser communicates with
+# the React dev server on :3000 and makes direct cross-origin (CORS) API requests to :5000.
+# Start with: docker compose up --build
+services:
+  # Express REST API server (container port 5000) handling Fibonacci calculation and in-memory storage.
+  api:
+    # Build the API dev image from ./server/Dockerfile.dev using ./server as the build context.
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./server
+    ports:
+      # Maps host port 5000 to container port 5000 so the browser can call http://localhost:5000 directly.
+      - '5000:5000'
+    volumes:
+      # Anonymous volume preserves the container's /app/node_modules so the bind mount below doesn't hide it.
+      - /app/node_modules
+      # Bind mount syncs local ./server source edits directly into the container for live reload via nodemon.
+      - ./server:/app
+
+  # React Single-Page Application dev server (Vite on container port 3000, exposed directly to host).
+  client:
+    # Starts api before client so the backend endpoint is ready when the UI loads.
+    depends_on:
+      - api
+    # Build the frontend dev image from ./client/Dockerfile.dev using ./client as the build context.
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./client
+    ports:
+      # Maps host port 3000 to container port 3000 (open http://localhost:3000 in your browser).
+      - '3000:3000'
+    environment:
+      # Direct API base URL called from the browser (uses CORS on the Express server).
+      - VITE_API_URL=http://localhost:5000
+    volumes:
+      # Anonymous volume preserves the container's /app/node_modules from being overwritten by the bind mount.
+      - /app/node_modules
+      # Bind mount syncs local ./client source files into the container for instant Vite HMR hot-reloading.
+      - ./client:/app
