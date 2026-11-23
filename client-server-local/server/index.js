@@ -1,18 +1,11 @@
 // ============================================================================
 // Express App Setup
 // ============================================================================
-const fs = require("fs");
-const path = require("path");
 const express = require("express");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const clientDistPath = path.join(__dirname, "public");
-const hasClientBundle = fs.existsSync(path.join(clientDistPath, "index.html"));
-
-// Allow cross-origin requests in development (React dev server on :3000 -> Express on :5000).
-// In single-container production, the SPA is served from the same origin.
+// Allow cross-origin requests from the React dev server (http://localhost:3000 -> http://localhost:5000).
 app.use(cors());
 // Parse incoming JSON request bodies (e.g., { index: "7" } on POST /values).
 app.use(express.json());
@@ -36,11 +29,12 @@ function fib(index) {
 
 // ============================================================================
 // Express Route Handlers
+// (Accessed directly at http://localhost:5000/* without a '/api' proxy prefix.)
 // ============================================================================
 
-// Health-check endpoint (works in both development and single-container production).
-app.get("/health", (req, res) => {
-  res.send({ status: "ok" });
+// Simple health-check / sanity endpoint (GET /).
+app.get("/", (req, res) => {
+  res.send("Hi");
 });
 
 // Returns both submitted index history and calculated Fibonacci values (GET /values).
@@ -75,25 +69,7 @@ app.post("/values", (req, res) => {
   res.send({ seenIndexes, calculatedValues });
 });
 
-// ============================================================================
-// Production Static SPA Serving (Single-Container Mode, Zero Nginx)
-// ============================================================================
-if (hasClientBundle) {
-  // Serve compiled Vite static assets (JS, CSS, icons, etc.) from ./public.
-  app.use(express.static(clientDistPath));
-
-  // SPA fallback: return index.html for client-side React Router paths (e.g., /otherpage).
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(clientDistPath, "index.html"));
-  });
-} else {
-  // Development sanity endpoint when the React client runs separately on :3000.
-  app.get("/", (req, res) => {
-    res.send("Hi");
-  });
-}
-
-// Start listening on PORT (defaults to 5000).
-app.listen(PORT, () => {
-  console.log(`Listening on port ${PORT}`);
+// Start listening on port 5000 (exposed directly to host as localhost:5000).
+app.listen(5000, () => {
+  console.log("Listening on port 5000");
 });

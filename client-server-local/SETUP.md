@@ -1,6 +1,6 @@
 # Installation & Running Guide
 
-This guide covers how to set up, run, test, and build the **client-server-local** Fibonacci calculator application locally using Docker Compose (or directly with Node.js).
+This guide covers how to set up and run the **client-server-local** Fibonacci calculator application locally using Docker Compose (or directly with Node.js).
 
 For an overview of the architecture and API endpoints, see [README.md](./README.md).
 
@@ -12,7 +12,6 @@ Install the following before getting started:
 
 - **Docker** (Docker Desktop on macOS/Windows, or Docker Engine on Linux)
 - **Docker Compose** (included with Docker Desktop via `docker compose`, or standalone `docker-compose`)
-- **Git** (optional, if cloning the repository)
 
 Verify your installation:
 
@@ -37,9 +36,11 @@ You do **not** need to run `npm install` manually on your host machine when runn
 
 ---
 
-## 3. Running in Development Mode (Docker Compose)
+## 3. Running Locally (Docker Compose)
 
-### Start All Services
+> **Why Docker Compose here?** [`docker-compose.yml`](./docker-compose.yml) is kept as a **local development convenience**—it lets you launch both Vite HMR (`:3000`) and Express `nodemon` (`:5000`) in one command without installing Node.js on your host. If you already have Node.js installed locally, you can also run `npm run dev` in `server/` and `client/` directly in two terminals.
+
+### Start Both Services
 
 Build the development images and launch both containers (`client`, `api`):
 
@@ -72,9 +73,9 @@ Once both containers are up:
    - **Indexes I have seen** displays all submitted indexes from the server's in-memory array (`seenIndexes`).
    - **Calculated Values** displays the computed Fibonacci values from the server's in-memory object (`calculatedValues`).
 
-> **Note:** Because data is stored in memory inside the `api` container, submitted indexes and calculated values reset whenever the `api` container restarts (including `nodemon` auto-restarts during development).
+> **Note:** Because data is stored in memory inside the `api` container, submitted indexes and calculated values reset whenever the `api` container restarts (including `nodemon` auto-restarts).
 
-### Live Reloading During Development
+### Live Reloading
 
 Source folders are bind-mounted into their containers in `docker-compose.yml`:
 
@@ -104,50 +105,7 @@ docker compose down -v
 
 ---
 
-## 5. Running Tests
-
-### Option A: Run Client Tests via Docker
-
-```bash
-docker build -t cs-client-test -f ./client/Dockerfile.dev ./client
-docker run cs-client-test npm test
-```
-
-### Option B: Run Client Tests Locally (Requires Node.js)
-
-```bash
-cd client
-npm install
-npm test
-```
-
----
-
-## 6. Building & Running the Production Image (Single Container, Zero Nginx)
-
-Production uses a single root-level multi-stage [`Dockerfile`](./Dockerfile) that compiles the React SPA with `VITE_API_URL=""` (same-origin) and serves both the static bundle and the REST API from Express:
-
-```bash
-docker build -t client-server-local .
-docker run -d --name client-server-local -p 5000:5000 client-server-local
-```
-
-Then open [http://localhost:5000](http://localhost:5000) (health check at [http://localhost:5000/health](http://localhost:5000/health)).
-
-You can override the listening port via `PORT` (useful for Cloud Run, Render, Railway, etc.):
-
-```bash
-docker run -d --name client-server-local -e PORT=8080 -p 8080:8080 client-server-local
-```
-
-| Stage | Base Image | Responsibility |
-| :--- | :--- | :--- |
-| **Stage 1 (`client-builder`)** | `node:lts-alpine` | Builds static Vite/React bundle (`/app/client/dist`) with `VITE_API_URL=""` |
-| **Stage 2 (runtime)** | `node:lts-alpine` | Runs `node index.js` (Express on `$PORT` / `5000`) serving `/health`, `/values`, static files from `./public`, and SPA `index.html` fallback |
-
----
-
-## 7. Ports & Environment Reference
+## 5. Ports & Environment Reference
 
 | Service | Host Port | Container Port | Notes |
 | :--- | :--- | :--- | :--- |
@@ -160,7 +118,7 @@ docker run -d --name client-server-local -e PORT=8080 -p 8080:8080 client-server
 
 ---
 
-## 8. Troubleshooting
+## 6. Troubleshooting
 
 - **Port `3000` or `5000` is already in use:** Change the host port mapping in `docker-compose.yml` (for example, `'5001:5000'` for `api` and update `VITE_API_URL=http://localhost:5001` on `client`), then restart with `docker compose up`.
 - **Added a new package to `package.json`, but container can't find it:** Because `/app/node_modules` is preserved as an anonymous volume, rebuild and recreate volumes with:
