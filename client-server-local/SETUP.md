@@ -38,7 +38,7 @@ You do **not** need to run `npm install` manually on your host machine when runn
 
 ## 3. Running Locally (Docker Compose)
 
-> **Why Docker Compose here?** [`docker-compose.yml`](./docker-compose.yml) is kept as a **local development convenience**—it lets you launch both Vite HMR (`:3000`) and Express `nodemon` (`:5000`) in one command without installing Node.js on your host. If you already have Node.js installed locally, you can also run `npm run dev` in `server/` and `client/` directly in two terminals.
+> **Why Docker Compose here?** [`docker-compose.yml`](./docker-compose.yml) is kept as a **local development convenience**—it lets you launch both Vite HMR (`:3000`) and Express `nodemon` (`:5000`) in one command without installing Node.js on your host. If you already have Node.js installed locally, you can also run `npm run dev` in `server/` and `npm run start` in `client/` directly in two terminals.
 
 ### Start Both Services
 
