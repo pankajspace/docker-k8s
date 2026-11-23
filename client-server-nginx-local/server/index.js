@@ -2,19 +2,18 @@
 // Express App Setup
 // ============================================================================
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
 
 const app = express();
 // Allow cross-origin requests (useful if the API is accessed directly outside Nginx).
 app.use(cors());
 // Parse incoming JSON request bodies (e.g., { index: "7" } on POST /values).
-app.use(bodyParser.json());
+app.use(express.json());
 
 // ============================================================================
 // In-Memory Data Structures (replaces PostgreSQL & Redis)
 // ============================================================================
-// Stores the history of all submitted indexes as [{ number: <int> }, ...]
+// Stores the history of all submitted indexes as [<int>, ...]
 const seenIndexes = [];
 
 // Stores calculated Fibonacci values as { "<index>": <calculatedValue>, ... }
@@ -60,14 +59,14 @@ app.post("/values", (req, res) => {
   const indexKey = String(parsedIndex);
 
   // Record submitted index in the in-memory list
-  seenIndexes.push({ number: parsedIndex });
+  seenIndexes.push(parsedIndex);
 
   // Compute and cache the Fibonacci value in the in-memory map
   if (calculatedValues[indexKey] === undefined) {
     calculatedValues[indexKey] = fib(parsedIndex);
   }
 
-  res.send({ working: true });
+  res.send({ seenIndexes, calculatedValues });
 });
 
 // Start listening on internal port 5000 (targeted by Nginx's 'api:5000' upstream).

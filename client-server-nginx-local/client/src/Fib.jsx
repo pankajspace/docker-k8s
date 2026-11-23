@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 
 // Main Fibonacci calculator component: lets users submit indexes and displays both
 // historical indexes and calculated values stored in memory on the Node.js server.
 const Fib = () => {
-  // List of all submitted index records returned by the server: [{ number: 5 }, ...]
+  // List of all submitted indexes returned by the server: [5, ...]
   const [seenIndexes, setSeenIndexes] = useState([]);
   // Key-value map of calculated Fibonacci results returned by the server: { "5": 8, ... }
   const [values, setValues] = useState({});
@@ -13,24 +13,27 @@ const Fib = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const applyServerData = useCallback((data = {}) => {
+    setSeenIndexes(Array.isArray(data.seenIndexes) ? data.seenIndexes : []);
+    setValues(data.calculatedValues || {});
+  }, []);
+
   // Requests both submitted indexes and calculated values in a single call (Nginx '/api' -> Express '/values').
   const refreshData = useCallback(async () => {
     try {
       const res = await axios.get("/api/values");
-      const data = res.data || {};
-      setSeenIndexes(Array.isArray(data.seenIndexes) ? data.seenIndexes : []);
-      setValues(data.calculatedValues || {});
+      applyServerData(res.data);
     } catch (err) {
       // Ignore transient load errors until services finish booting
     }
-  }, []);
+  }, [applyServerData]);
 
   // Fetch initial data from the Express API once when the component mounts.
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  // Submits a new index to Express, which calculates fib(index) and stores it in memory.
+  // Submits a new index to Express, which calculates fib(index) and returns the updated state directly.
   const handleSubmit = async (event) => {
     event.preventDefault();
     const trimmed = index.trim();
@@ -41,9 +44,9 @@ const Fib = () => {
     setError("");
     setSubmitting(true);
     try {
-      await axios.post("/api/values", { index: trimmed });
+      const res = await axios.post("/api/values", { index: trimmed });
       setIndex("");
-      await refreshData();
+      applyServerData(res.data);
     } catch (err) {
       const message =
         err?.response?.data || "Unable to submit index. Please try again.";
@@ -53,8 +56,10 @@ const Fib = () => {
     }
   };
 
-  const sortedEntries = Object.entries(values).sort(
-    ([a], [b]) => Number(a) - Number(b)
+  const sortedEntries = useMemo(
+    () =>
+      Object.entries(values).sort(([a], [b]) => Number(a) - Number(b)),
+    [values]
   );
 
   return (
@@ -121,7 +126,7 @@ const Fib = () => {
         </div>
         {seenIndexes.length > 0 ? (
           <div className="index-list">
-            {seenIndexes.map(({ number }, idx) => (
+            {seenIndexes.map((number, idx) => (
               <span key={`${number}-${idx}`} className="index-chip">
                 {number}
               </span>
@@ -142,19 +147,12 @@ const Fib = () => {
         </div>
         {sortedEntries.length > 0 ? (
           <div className="values-grid">
-            {sortedEntries.map(([key, val]) => {
-              const isPending = val === "Nothing yet!";
-              return (
-                <div key={key} className="value-item">
-                  <span className="value-key">fib({key})</span>
-                  <span
-                    className={isPending ? "value-pending" : "value-result"}
-                  >
-                    {val}
-                  </span>
-                </div>
-              );
-            })}
+            {sortedEntries.map(([key, val]) => (
+              <div key={key} className="value-item">
+                <span className="value-key">fib({key})</span>
+                <span className="value-result">{val}</span>
+              </div>
+            ))}
           </div>
         ) : (
           <p className="empty-state">

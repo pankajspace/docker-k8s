@@ -55,5 +55,5 @@ Then open [http://localhost:3050](http://localhost:3050).
 All API requests are routed by Nginx from `/api/*` to the Express server (stripping the `/api` prefix):
 
 - `GET /api/` — Health check (`"Hi"`)
-- `GET /api/values` — Returns `{ seenIndexes: [{ number: 7 }, ...], calculatedValues: { "7": 21, ... } }`
-- `POST /api/values` — Body `{ "index": "7" }`. Validates `0 <= index <= 40`, computes `fib(index)`, and stores it in memory.
+- `GET /api/values` — Returns `{ seenIndexes: [7, ...], calculatedValues: { "7": 21, ... } }`
+- `POST /api/values` — Body `{ "index": "7" }`. Validates `0 <= index <= 40`, computes `fib(index)`, stores it in memory, and returns the updated `{ seenIndexes, calculatedValues }`.
