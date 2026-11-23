@@ -42,7 +42,8 @@ flowchart LR
 
 client-server-prod/
 ├── README.md                  # Architecture overview
-├── DEPLOY.md                  # Step-by-step AWS & GitHub Actions setup guide
+├── AWS.md                     # AWS services, console setup, IAM policy, DNS & cost checklist
+├── DEPLOY.md                  # Step-by-step deployment & GitHub Actions guide
 ├── client/                    # React 18 + Vite SPA (builds to static dist/ for S3)
 │   ├── .env.example           # Example VITE_API_URL for production builds
 │   ├── package.json           # Includes `npm run build` for static output
@@ -74,4 +75,5 @@ client-server-prod/
 
 ## Deployment
 
-See **[DEPLOY.md](./DEPLOY.md)** for the full step-by-step AWS setup (EC2 + Elastic IP + Caddy, S3 + CloudFront + ACM, DNS records, and updates).
+- **[AWS.md](./AWS.md)** — AWS console setup checklist (ACM `us-east-1`, S3 + OAC, CloudFront, EC2 + Elastic IP + Security Group, DNS, least-privilege IAM policy, costs & teardown).
+- **[DEPLOY.md](./DEPLOY.md)** — Step-by-step EC2/Caddy setup, frontend build/sync commands, and GitHub Actions secrets/variables.
