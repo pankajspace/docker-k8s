@@ -123,26 +123,27 @@ npm test
 
 ---
 
-## 6. Building Production Images
+## 6. Building & Running the Production Image (Single Container, Zero Nginx)
 
-Each service includes a production `Dockerfile` (with a multi-stage Node -> Nginx build for `client`):
-
-```bash
-docker build -t cs-client --build-arg VITE_API_URL=http://localhost:5000 ./client
-docker build -t cs-server ./server
-```
-
-Run them locally:
+Production uses a single root-level multi-stage [`Dockerfile`](./Dockerfile) that compiles the React SPA with `VITE_API_URL=""` (same-origin) and serves both the static bundle and the REST API from Express:
 
 ```bash
-docker run -d --name cs-server -p 5000:5000 cs-server
-docker run -d --name cs-client -p 3000:3000 cs-client
+docker build -t client-server-local .
+docker run -d --name client-server-local -p 5000:5000 client-server-local
 ```
 
-| Service | Production Dockerfile | Runtime Behavior |
+Then open [http://localhost:5000](http://localhost:5000) (health check at [http://localhost:5000/health](http://localhost:5000/health)).
+
+You can override the listening port via `PORT` (useful for Cloud Run, Render, Railway, etc.):
+
+```bash
+docker run -d --name client-server-local -e PORT=8080 -p 8080:8080 client-server-local
+```
+
+| Stage | Base Image | Responsibility |
 | :--- | :--- | :--- |
-| **`client`** | `./client/Dockerfile` | Stage 1 builds static Vite/React bundle (`/app/dist`) with `VITE_API_URL`; Stage 2 serves it via Nginx on port `3000` with SPA `try_files` fallback |
-| **`server`** | `./server/Dockerfile` | Runs `node index.js` (Express on port `5000`, CORS enabled, in-memory storage & `fib()` calculation) |
+| **Stage 1 (`client-builder`)** | `node:lts-alpine` | Builds static Vite/React bundle (`/app/client/dist`) with `VITE_API_URL=""` |
+| **Stage 2 (runtime)** | `node:lts-alpine` | Runs `node index.js` (Express on `$PORT` / `5000`) serving `/health`, `/values`, static files from `./public`, and SPA `index.html` fallback |
 
 ---
 

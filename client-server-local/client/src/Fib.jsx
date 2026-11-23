@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 
-// Direct API base URL (no Nginx reverse proxy). Configurable via VITE_API_URL.
+// API base URL: defaults to http://localhost:5000 in dev; set VITE_API_URL="" in single-container prod for same-origin requests.
 const API_BASE_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000"
+  import.meta.env.VITE_API_URL ?? "http://localhost:5000"
 ).replace(/\/+$/, "");
 
 // Main Fibonacci calculator component: lets users submit indexes and displays both

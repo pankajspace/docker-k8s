@@ -62,19 +62,26 @@ flowchart TB
     Err422 -.->|"Error message"| Browser
 ```
 
-| Service | Container Role | Tech Stack | Port Mapping |
+| Service | Container Role | Tech Stack | Port Mapping (Dev) |
 | :--- | :--- | :--- | :--- |
-| **`client`** | Single-Page Application (SPA) UI (Vite dev server in dev; Nginx serving static bundle in prod) | React 18, Vite, React Router, Nginx (prod) | `3000:3000` |
-| **`api`** | REST API, Fibonacci calculator, CORS handler, and in-memory storage | Node.js, Express, `cors` | `5000:5000` |
+| **`client`** | Single-Page Application (SPA) UI (Vite dev server in dev; compiled static assets served by Express in prod) | React 18, Vite, React Router | `3000:3000` |
+| **`api`** | REST API, Fibonacci calculator, CORS handler, in-memory storage, and static SPA server (in prod) | Node.js, Express, `cors` | `5000:5000` |
 
-### Why CORS Is Required Here
+### Why CORS Is Required in Development (and Not in Production)
 
-Unlike `client-server-nginx-local` (where Nginx serves both `/` and `/api/*` under the same origin `http://localhost:3050`), this setup serves the frontend from `http://localhost:3000` and the backend from `http://localhost:5000`. Because the ports differ, browsers treat API requests as **cross-origin**, so `app.use(cors())` in [`server/index.js`](./server/index.js) is required for `fetch()` calls to succeed.
+- **Development (`docker compose up`):** The frontend runs on `http://localhost:3000` and the backend on `http://localhost:5000`. Because the ports differ, browsers treat API requests as **cross-origin**, so `app.use(cors())` in [`server/index.js`](./server/index.js) is required.
+- **Production (Single Container — [`Dockerfile`](./Dockerfile)):** There is **zero Nginx**. A multi-stage build compiles the React app with `VITE_API_URL=""` into `/app/public` inside the Express container. Express serves both the API (`/health`, `/values`) and the static SPA (`express.static` + `*` fallback to `index.html`) from the **same origin** on port `5000` (or `$PORT`).
 
-### Client Serving (Development vs. Production)
+```mermaid
+flowchart LR
+    User(["Browser / User"])
 
-- **In local development** ([`docker-compose.yml`](./docker-compose.yml) / [`client/Dockerfile.dev`](./client/Dockerfile.dev)): The `client` container runs the **Vite dev server** on port `3000` for live reloading and Hot Module Replacement.
-- **In production** ([`client/Dockerfile`](./client/Dockerfile)): A multi-stage build compiles the React app with Vite into static assets (`/app/dist`), then serves them with Nginx ([`client/nginx/default.conf`](./client/nginx/default.conf)) on port `3000` using `try_files $uri $uri/ /index.html` so React Router paths like `/otherpage` work on page refresh.
+    subgraph ProdContainer["Single Production Container (:5000)"]
+        Express["Express Server (server/index.js)\n/health & /values (REST API + fib())\n/* (Static React SPA + index.html fallback)"]
+    end
+
+    User -->|"Same-Origin HTTP :5000\n(UI + API, no CORS, no Nginx)"| Express
+```
 
 ## Service Architecture Diagrams
 
@@ -182,8 +189,9 @@ Then open [http://localhost:3000](http://localhost:3000) (API runs at [http://lo
 
 ## API Endpoints
 
-All API requests go directly to the Express server on port `5000` (no `/api` prefix):
+All API requests go directly to the Express server (no `/api` prefix):
 
-- `GET /` — Health check (`"Hi"`)
+- `GET /health` — Health check (`{ "status": "ok" }`)
+- `GET /` — Development sanity check (`"Hi"`); in single-container production, serves the React SPA (`index.html`)
 - `GET /values` — Returns `{ seenIndexes: [7, ...], calculatedValues: { "7": 21, ... } }`
 - `POST /values` — Body `{ "index": "7" }`. Validates `0 <= index <= 40`, computes `fib(index)`, stores it in memory, and returns the updated `{ seenIndexes, calculatedValues }`.
