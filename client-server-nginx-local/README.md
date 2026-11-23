@@ -18,7 +18,7 @@ flowchart LR
 
     subgraph Docker["Docker Network (docker-compose)"]
         Nginx["Nginx Reverse Proxy\n(Host :3050 -> :80)"]
-        Client["React Client (:3000)\nDev: Vite Dev Server\nProd: Nginx (static SPA)"]
+        Client["React Client (:3000)\nVite Dev Server"]
         API["Express API Server\n(:5000)\nIn-Memory Data + fib()"]
     end
 
@@ -27,57 +27,51 @@ flowchart LR
     Nginx -->|"/api/*"| API
 ```
 
-### Detailed Architecture
+### Detailed Architecture (Request & Data Flow)
 
 ```mermaid
 flowchart TB
-    subgraph Host["Host Machine"]
-        Browser(["Browser\nhttp://localhost:3050"])
-        HostClientSrc["./client\n(Dev Bind Mount)"]
-        HostServerSrc["./server\n(Dev Bind Mount)"]
+    Browser(["Browser\nhttp://localhost:3050"])
+
+    subgraph NginxSvc["nginx Reverse Proxy (:3050 -> :80)"]
+        NginxEntry["HTTP / WS Listener (:80)"]
+        LocRoot["location /\nHTTP/1.1 + WS Upgrade Headers"]
+        LocApi["location /api\nrewrite /api/(.*) /$1 break"]
+        NginxEntry -->|"Page, Assets, HMR WS"| LocRoot
+        NginxEntry -->|"/api/* REST requests"| LocApi
     end
 
-    subgraph DockerNet["Docker Bridge Network (docker-compose embedded DNS)"]
-        subgraph NginxSvc["nginx Container (nginx:alpine | Host :3050 -> :80)"]
-            NginxListen["listen 80\n(nginx/default.conf)"]
-            LocRoot["location /\nHTTP/1.1 + WS Upgrade\nproxy_pass http://client"]
-            LocApi["location /api\nrewrite /api/(.*) /$1 break\nproxy_pass http://api"]
-            NginxListen --> LocRoot
-            NginxListen --> LocApi
-        end
-
-        subgraph ClientSvc["client Container (Internal :3000)"]
-            ClientDev["Dev Mode (Dockerfile.dev)\nVite Dev Server :3000 + HMR\n(node:lts-alpine)"]
-            ClientProd["Prod Mode (Dockerfile)\nNginx :3000 (client/nginx/default.conf)\ntry_files $uri $uri/ /index.html"]
-            ReactSPA["React 18 SPA (runs in Browser)\nApp.jsx + React Router\n'/' -> Fib.jsx | '/otherpage' -> OtherPage.jsx"]
-            ClientDev -.->|"serves bundle & HMR"| ReactSPA
-            ClientProd -.->|"serves /app/dist static assets"| ReactSPA
-        end
-
-        subgraph ApiSvc["api Container (Internal :5000)"]
-            ApiRuntime["Node.js Runtime\nDev: nodemon | Prod: node index.js"]
-            ExpressApp["Express Server :5000\ncors() + express.json()"]
-            Routes["Routes (after /api strip)\nGET / | GET /values | POST /values"]
-            Validate["Validate 0 <= index <= 40\n(422 on invalid/too high)"]
-            FibCalc["fib(index)\nRecursive O(2^n) Calculator"]
-            MemStore[("In-Memory Store (volatile)\nseenIndexes: number[]\ncalculatedValues: { index: value }")]
-
-            ApiRuntime --> ExpressApp --> Routes
-            Routes -->|"POST /values"| Validate
-            Validate -->|"valid"| FibCalc
-            FibCalc -->|"cache miss -> compute & save"| MemStore
-            Routes <-->|"GET /values"| MemStore
-        end
+    subgraph ClientSvc["client Service (:3000)"]
+        ClientServer["Vite Dev Server (:3000)\nServes SPA bundle + HMR WebSocket"]
+        ReactSPA["React 18 SPA (runs in Browser)\nApp.jsx -> '/' Fib.jsx | '/otherpage' OtherPage.jsx"]
+        ClientServer -->|"HTML / JS / CSS + HMR"| ReactSPA
     end
 
-    Browser -->|"HTTP / WebSocket :3050"| NginxListen
-    LocRoot -->|"client:3000"| ClientDev
-    LocRoot -.->|"prod: client:3000"| ClientProd
-    LocApi -->|"api:5000"| ExpressApp
-    ReactSPA -->|"fetch('/api/values')\nGET & POST JSON"| NginxListen
+    subgraph ApiSvc["api Service (:5000)"]
+        Middleware["Express Middleware\ncors() -> express.json()"]
+        GetRoot["GET /\nReturns 'Hi'"]
+        GetValues["GET /values\nReads current state"]
+        PostValues["POST /values ({ index })\nValidates 0 <= index <= 40"]
+        Err422["HTTP 422\n'Invalid index' / 'Index too high'"]
+        FibCalc["Cache check -> fib(index)\nComputes on cache miss"]
+        MemStore[("In-Memory Store\nseenIndexes: [7, ...]\ncalculatedValues: { '7': 21, ... }")]
 
-    HostClientSrc -.->|"bind mount -> /app\n(+ anon vol /app/node_modules)"| ClientDev
-    HostServerSrc -.->|"bind mount -> /app\n(+ anon vol /app/node_modules)"| ApiRuntime
+        Middleware --> GetRoot
+        Middleware --> GetValues
+        Middleware --> PostValues
+        PostValues -->|"invalid / > 40"| Err422
+        PostValues -->|"valid"| FibCalc
+        FibCalc -->|"push index & save value"| MemStore
+        GetValues <-->|"read state"| MemStore
+        FibCalc -->|"updated state"| GetValues
+    end
+
+    Browser -->|"1. GET / or /otherpage"| NginxEntry
+    LocRoot -->|"2. Forward to client:3000"| ClientServer
+    ReactSPA -->|"3. GET /api/values (mount / refresh)\n4. POST /api/values { index } (submit)"| NginxEntry
+    LocApi -->|"5. Forward / or /values to api:5000"| Middleware
+    GetValues -.->|"6. JSON { seenIndexes, calculatedValues }"| Browser
+    Err422 -.->|"Error message"| Browser
 ```
 
 | Service | Container Role | Tech Stack | Internal Port |
@@ -98,134 +92,128 @@ This project has **two** separate Nginx configurations with different responsibi
 
 ### 1. Nginx Reverse Proxy Service (`nginx`)
 
-Single public entry point built from `nginx:alpine` ([`nginx/Dockerfile.dev`](./nginx/Dockerfile.dev) / [`nginx/Dockerfile`](./nginx/Dockerfile)) with custom routing in [`nginx/default.conf`](./nginx/default.conf).
+Acts as the single entry point ([`nginx/default.conf`](./nginx/default.conf)), routing frontend and WebSocket traffic to `client:3000` and rewriting `/api/*` requests to `api:5000`.
 
 ```mermaid
 flowchart LR
-    Browser(["Browser / Client\nhttp://localhost:3050"])
+    Browser(["Browser\nhttp://localhost:3050"])
 
-    subgraph NginxContainer["nginx Container (nginx:alpine | restart: always | depends_on: api, client)"]
-        PortMap["Port Mapping\nHost :3050 -> Container :80"]
-        ServerBlock["server { listen 80; }\n/etc/nginx/conf.d/default.conf"]
+    subgraph NginxSvc["nginx (:3050 -> :80)"]
+        ServerBlock["server { listen 80; }"]
 
         subgraph FrontendRoute["location /"]
-            WSHeaders["proxy_http_version 1.1\nUpgrade: $http_upgrade\nConnection: Upgrade\nHost: $http_host"]
-            UpstreamClient["upstream client\nserver client:3000"]
+            WSHeaders["Preserve Host + HTTP/1.1\nUpgrade & Connection: Upgrade"]
+            UpstreamClient["proxy_pass http://client"]
             WSHeaders --> UpstreamClient
         end
 
         subgraph ApiRoute["location /api"]
-            Rewrite["rewrite /api/(.*) /$1 break\n(strips '/api' prefix)"]
-            UpstreamApi["upstream api\nserver api:5000"]
+            Rewrite["rewrite /api/(.*) /$1 break\n(e.g. /api/values -> /values)"]
+            UpstreamApi["proxy_pass http://api"]
             Rewrite --> UpstreamApi
         end
 
-        PortMap --> ServerBlock
-        ServerBlock -->|"Pages, Assets, Vite HMR WS"| WSHeaders
-        ServerBlock -->|"/api/* REST calls"| Rewrite
+        ServerBlock -->|"GET /, /otherpage, assets, WS"| WSHeaders
+        ServerBlock -->|"GET/POST /api/*"| Rewrite
     end
 
-    ClientTarget["client:3000\n(React / Vite or Prod Nginx)"]
-    ApiTarget["api:5000\n(Express API Server)"]
+    ClientTarget["client (:3000)\nVite Dev Server"]
+    ApiTarget["api (:5000)\nExpress API Server"]
 
-    Browser -->|"Same-origin HTTP / WS"| PortMap
-    UpstreamClient -->|"HTTP / WS"| ClientTarget
-    UpstreamApi -->|"HTTP (rewritten path)"| ApiTarget
+    Browser -->|"HTTP / WS requests"| ServerBlock
+    UpstreamClient -->|"Forwarded frontend / WS"| ClientTarget
+    ClientTarget -.->|"HTML / JS / CSS / WS"| Browser
+    UpstreamApi -->|"Rewritten API request"| ApiTarget
+    ApiTarget -.->|"JSON / HTTP 422 response"| Browser
 ```
 
 ### 2. React Client Service (`client`)
 
-Serves the React 18 SPA on internal port `3000`, using Vite in development ([`client/Dockerfile.dev`](./client/Dockerfile.dev)) and a multi-stage Nginx build in production ([`client/Dockerfile`](./client/Dockerfile)).
+Serves the React 18 SPA on `:3000` and manages client-side routing, UI state, and API communication with `api` through `nginx`.
 
 ```mermaid
 flowchart TB
-    OuterNginx["Outer Nginx Proxy\n(client:3000)"]
+    OuterNginx["nginx Reverse Proxy\n(routes '/' -> client:3000)"]
 
-    subgraph DevFlow["Development Mode (docker-compose.yml / client/Dockerfile.dev)"]
-        HostSrc["Host ./client"] -.->|"bind mount -> /app"| ViteDev
-        AnonVol["Anonymous Volume\n/app/node_modules"] -.->|"preserves deps"| ViteDev
-        ViteDev["Vite Dev Server (:3000)\nnode:lts-alpine | npm run start\nLive Reload + HMR WebSocket"]
+    subgraph ClientServer["client Service (:3000)"]
+        ViteDev["Vite Dev Server (:3000)\nServes index.html, ESM modules & HMR WebSocket"]
     end
 
-    subgraph ProdFlow["Production Mode (client/Dockerfile Multi-Stage Build)"]
-        Stage1["Stage 1: builder (node:lts-alpine)\nnpm ci -> npm run build\nOutputs /app/dist"]
-        Stage2["Stage 2: runtime (nginx:alpine :3000)\nclient/nginx/default.conf\nroot /usr/share/nginx/html\ntry_files $uri $uri/ /index.html"]
-        Stage1 -->|"COPY --from=builder /app/dist"| Stage2
+    subgraph BrowserSPA["React 18 SPA (Browser Runtime)"]
+        Router["App.jsx (BrowserRouter)\nNavbar: Calculator ('/') | Other Page ('/otherpage')"]
+        OtherPage["OtherPage.jsx ('/otherpage')\nStatic view + link back to '/'"]
+
+        subgraph FibView["Fib.jsx ('/')"]
+            UIState["React State\nseenIndexes[] | values{} | index | error"]
+            MountOrRefresh["useEffect (mount) / Refresh button"]
+            FormSubmit["Form Submit (index: 0..40)"]
+            RenderUI["UI Render\nIndexes I have seen (chips)\nCalculated Values (sorted grid)\nError Alert Banner"]
+
+            MountOrRefresh -->|"GET /api/values"| ApiFetch["fetch() to Same-Origin /api/*"]
+            FormSubmit -->|"POST /api/values\n{ index }"| ApiFetch
+            ApiFetch -.->|"200 JSON -> applyServerData()"| UIState
+            ApiFetch -.->|"422 / error -> setError()"| UIState
+            UIState --> RenderUI
+        end
+
+        Router -->|"/"| FibView
+        Router -->|"/otherpage"| OtherPage
     end
 
-    subgraph BrowserSPA["React 18 SPA (Executed in Browser)"]
-        IndexEntry["src/index.jsx -> App.jsx\nBrowserRouter + Navbar"]
-        RouteFib["Route '/'\nFib.jsx\nState: seenIndexes, values, index, error"]
-        RouteOther["Route '/otherpage'\nOtherPage.jsx\nVerifies SPA routing & try_files"]
-        ApiCalls["Fetch Client\nGET /api/values (mount & Refresh)\nPOST /api/values (form submit)"]
-
-        IndexEntry --> RouteFib
-        IndexEntry --> RouteOther
-        RouteFib --> ApiCalls
-    end
-
-    OuterNginx -->|"Dev traffic + WS"| ViteDev
-    OuterNginx -.->|"Prod traffic"| Stage2
-    ViteDev -->|"ESM modules & HMR"| IndexEntry
-    Stage2 -.->|"Static HTML/JS/CSS"| IndexEntry
-    ApiCalls -->|"HTTP JSON via Outer Nginx"| OuterNginx
+    OuterNginx -->|"HTTP / WebSocket"| ViteDev
+    ViteDev -->|"App bundle + HMR"| Router
+    ApiFetch -->|"HTTP JSON via nginx (/api/*)"| OuterNginx
 ```
 
 ### 3. Express API Service (`api`)
 
-Node.js Express server listening on internal port `5000` ([`server/index.js`](./server/index.js)), combining REST endpoints, synchronous recursive Fibonacci computation, and volatile in-memory storage.
+Handles REST requests forwarded from `nginx` on `:5000` ([`server/index.js`](./server/index.js)), validating inputs, computing Fibonacci numbers recursively, and updating in-memory state.
 
 ```mermaid
 flowchart TB
-    OuterNginx["Outer Nginx Proxy\n(api:5000, '/api' stripped)"]
+    OuterNginx["nginx Reverse Proxy\n(forwards '/api/*' as '/*' to api:5000)"]
 
-    subgraph ApiContainer["api Container (node:lts-alpine | Internal :5000)"]
-        subgraph Modes["Container Startup"]
-            DevMode["Dev (server/Dockerfile.dev)\nnpm ci -> nodemon\n./server:/app + /app/node_modules"]
-            ProdMode["Prod (server/Dockerfile)\nnpm ci --omit=dev -> node index.js"]
-        end
+    subgraph ApiSvc["api Service (:5000 | server/index.js)"]
+        Middleware["Express Middleware\ncors() -> express.json()"]
 
-        subgraph Middleware["Express Middleware (server/index.js)"]
-            CORS["cors()"]
-            JsonParser["express.json()"]
-            CORS --> JsonParser
-        end
-
-        subgraph Handlers["Route Handlers"]
-            GetRoot["GET /\nReturns 'Hi' (health check)"]
-            GetValues["GET /values\nReturns { seenIndexes, calculatedValues }"]
+        subgraph Endpoints["Route Handlers"]
+            GetRoot["GET /"]
+            GetValues["GET /values"]
             PostValues["POST /values\nBody: { index }"]
         end
 
-        subgraph ValidationAndCalc["POST /values Processing"]
-            ParseCheck{"parseInt(index, 10)\nvalid & >= 0 & <= 40?"}
+        subgraph PostFlow["POST /values Request & Data Flow"]
+            Validate{"parseInt(index, 10)\nvalid & 0 <= index <= 40?"}
             Err422["HTTP 422\n'Invalid index' or 'Index too high'"]
-            RecordIdx["seenIndexes.push(parsedIndex)"]
-            CacheCheck{"calculatedValues[key]\nalready cached?"}
-            ComputeFib["fib(parsedIndex)\nRecursive O(2^n) calculation\ncalculatedValues[key] = result"]
-            SendResp["HTTP 200 JSON\n{ seenIndexes, calculatedValues }"]
+            AppendIdx["seenIndexes.push(parsedIndex)"]
+            CacheCheck{"calculatedValues[key]\nexists?"}
+            ComputeFib["fib(parsedIndex)\nRecursive O(2^n)\ncalculatedValues[key] = result"]
+            OkJson["HTTP 200 JSON\n{ seenIndexes, calculatedValues }"]
 
-            ParseCheck -->|"No"| Err422
-            ParseCheck -->|"Yes"| RecordIdx --> CacheCheck
-            CacheCheck -->|"No (miss)"| ComputeFib --> SendResp
-            CacheCheck -->|"Yes (hit)"| SendResp
+            Validate -->|"No"| Err422
+            Validate -->|"Yes"| AppendIdx --> CacheCheck
+            CacheCheck -->|"Miss"| ComputeFib --> OkJson
+            CacheCheck -->|"Hit"| OkJson
         end
 
-        MemData[("In-Memory Data\nseenIndexes: [7, ...]\ncalculatedValues: { '7': 21, ... }\n(resets on container restart)")]
+        HealthResp["HTTP 200\n'Hi'"]
+        MemData[("In-Memory Data\nseenIndexes: [7, ...]\ncalculatedValues: { '7': 21, ... }")]
 
-        DevMode -.-> CORS
-        ProdMode -.-> CORS
-        JsonParser --> GetRoot
-        JsonParser --> GetValues
-        JsonParser --> PostValues
-        PostValues --> ParseCheck
+        Middleware --> GetRoot --> HealthResp
+        Middleware --> GetValues
+        Middleware --> PostValues --> Validate
+
         GetValues <-->|"read"| MemData
-        RecordIdx -->|"append"| MemData
+        GetValues --> OkJson
+        AppendIdx -->|"append"| MemData
         CacheCheck -.->|"lookup"| MemData
         ComputeFib -->|"write"| MemData
     end
 
-    OuterNginx -->|"HTTP :5000"| CORS
+    OuterNginx -->|"HTTP :5000"| Middleware
+    HealthResp -.->|"response"| OuterNginx
+    OkJson -.->|"JSON response"| OuterNginx
+    Err422 -.->|"422 response"| OuterNginx
 ```
 
 ## Quick Start
