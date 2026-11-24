@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
@@ -10,12 +11,38 @@ import * as elasticache from "aws-cdk-lib/aws-elasticache";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
+import * as route53 from "aws-cdk-lib/aws-route53";
+import * as route53Targets from "aws-cdk-lib/aws-route53-targets";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 
+export interface MultiContainerServicesProdStackProps extends cdk.StackProps {
+  /** Custom domain served by CloudFront (default: fib2.techtoday.click). */
+  readonly domainName: string;
+  /**
+   * ARN of an issued ACM certificate in us-east-1 covering `domainName`.
+   * Required to attach the custom domain to CloudFront.
+   */
+  readonly acmCertificateArn?: string;
+  /**
+   * Optional Route 53 Hosted Zone ID for `hostedZoneName`.
+   * When provided alongside `acmCertificateArn`, CDK creates A/AAAA Alias records automatically.
+   */
+  readonly hostedZoneId?: string;
+  /** Parent DNS zone name (default: techtoday.click). */
+  readonly hostedZoneName?: string;
+}
+
 export class MultiContainerServicesProdStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: MultiContainerServicesProdStackProps
+  ) {
     super(scope, id, props);
+
+    const { domainName, acmCertificateArn, hostedZoneId, hostedZoneName } =
+      props;
 
     // =========================================================================
     // 1. Networking (VPC: Public Subnets for ALB, Private Subnets for Compute/Data)
@@ -183,6 +210,7 @@ export class MultiContainerServicesProdStack extends cdk.Stack {
       }),
       environment: {
         PORT: "5000",
+        CLIENT_ORIGIN: `https://${domainName}`,
         PGHOST: postgres.dbInstanceEndpointAddress,
         PGPORT: postgres.dbInstanceEndpointPort,
         PGDATABASE: databaseName,
@@ -331,9 +359,23 @@ export class MultiContainerServicesProdStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
+    const certificate = acmCertificateArn
+      ? acm.Certificate.fromCertificateArn(
+          this,
+          "SiteCertificate",
+          acmCertificateArn
+        )
+      : undefined;
+
     const distribution = new cloudfront.Distribution(this, "AppDistribution", {
-      comment: "Single-origin CloudFront for multi-container-services-prod",
+      comment: `Single-origin CloudFront for ${domainName}`,
       defaultRootObject: "index.html",
+      ...(certificate
+        ? {
+            domainNames: [domainName],
+            certificate,
+          }
+        : {}),
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -371,6 +413,38 @@ export class MultiContainerServicesProdStack extends cdk.Stack {
       ],
     });
 
+    // Optional: automatically create Route 53 A/AAAA Alias records if hostedZoneId is provided
+    if (certificate && hostedZoneId && hostedZoneName) {
+      const zone = route53.HostedZone.fromHostedZoneAttributes(
+        this,
+        "HostedZone",
+        {
+          hostedZoneId,
+          zoneName: hostedZoneName,
+        }
+      );
+
+      const recordName = domainName.endsWith(`.${hostedZoneName}`)
+        ? domainName.slice(0, -(hostedZoneName.length + 1))
+        : domainName;
+
+      new route53.ARecord(this, "SiteAliasRecordA", {
+        zone,
+        recordName,
+        target: route53.RecordTarget.fromAlias(
+          new route53Targets.CloudFrontTarget(distribution)
+        ),
+      });
+
+      new route53.AaaaRecord(this, "SiteAliasRecordAAAA", {
+        zone,
+        recordName,
+        target: route53.RecordTarget.fromAlias(
+          new route53Targets.CloudFrontTarget(distribution)
+        ),
+      });
+    }
+
     // Deploy compiled React static bundle (run `npm run build` in ../client first)
     new s3deploy.BucketDeployment(this, "DeployFrontend", {
       sources: [
@@ -385,8 +459,15 @@ export class MultiContainerServicesProdStack extends cdk.Stack {
     // 6. Stack Outputs
     // =========================================================================
     new cdk.CfnOutput(this, "AppUrl", {
-      value: `https://${distribution.distributionDomainName}`,
+      value: certificate
+        ? `https://${domainName}`
+        : `https://${distribution.distributionDomainName}`,
       description: "Single-origin HTTPS URL for the application",
+    });
+
+    new cdk.CfnOutput(this, "CloudFrontDomainName", {
+      value: distribution.distributionDomainName,
+      description: `DNS CNAME / Route 53 Alias target for ${domainName}`,
     });
 
     new cdk.CfnOutput(this, "CloudFrontDistributionId", {

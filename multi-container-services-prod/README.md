@@ -1,9 +1,9 @@
 # Multi-Container Services Prod (AWS Architecture)
 
-Production-ready AWS deployment of the multi-container Fibonacci calculator application provisioned with **AWS CDK (TypeScript)** using a **single-origin CloudFront architecture**:
+Production-ready AWS deployment of the multi-container Fibonacci calculator application provisioned with **AWS CDK (TypeScript)** using a **single-origin CloudFront architecture** at **`https://fib2.techtoday.click`**:
 
-- **Frontend (`/*`):** Static React 18 + Vite SPA stored in a private **Amazon S3** bucket and served over HTTPS via **Amazon CloudFront** with Origin Access Control (OAC).
-- **API Routing (`/api/*`):** CloudFront forwards `/api/*` requests to an **Application Load Balancer (ALB)** in public subnets (protected by an `X-Origin-Verify` header), which routes to the private **ECS Fargate** `api` service on port `5000`.
+- **Frontend (`https://fib2.techtoday.click/*`):** Static React 18 + Vite SPA stored in a private **Amazon S3** bucket and served over HTTPS via **Amazon CloudFront** (OAC + **ACM** certificate in `us-east-1`).
+- **API Routing (`https://fib2.techtoday.click/api/*`):** CloudFront forwards `/api/*` requests to an **Application Load Balancer (ALB)** in public subnets (protected by an `X-Origin-Verify` header), which routes to the private **ECS Fargate** `api` service on port `5000`.
 - **Background Worker:** Separate **ECS Fargate** `worker` service in private subnets (no exposed ports) subscribed to Valkey Pub/Sub `"insert"` events to compute Fibonacci values asynchronously.
 - **Managed Data Layer:** **Amazon RDS for PostgreSQL 16** (credentials injected via **AWS Secrets Manager**) and **Amazon ElastiCache for Valkey Serverless** (TLS-encrypted) in isolated private subnets.
 
@@ -13,7 +13,7 @@ Production-ready AWS deployment of the multi-container Fibonacci calculator appl
 
 ```mermaid
 flowchart LR
-    User(["Browser / User"]) --> CF["Amazon CloudFront\n(HTTPS Single Origin)"]
+    User(["Browser / User"]) --> CF["Amazon CloudFront\nhttps://fib2.techtoday.click\n(ACM Cert in us-east-1)"]
 
     CF -->|"/* (SPA + 403/404 -> index.html)"| S3[("Amazon S3\nPrivate + OAC\nclient/dist/")]
     CF -->|"/api/* (+ X-Origin-Verify)"| ALB["Application Load Balancer\n(Public Subnets)"]
@@ -47,6 +47,7 @@ flowchart LR
 
 multi-container-services-prod/
 ├── README.md                           # Architecture overview and differences from local
+├── AWS.md                              # Pre-push AWS setup checklist (ACM, CDK bootstrap, OIDC IAM, DNS)
 ├── DEPLOY.md                           # Step-by-step CDK bootstrap, deploy, CI/CD, and teardown guide
 ├── client/                             # React 18 + Vite SPA (builds to static dist/ for S3 + CloudFront)
 │   ├── index.html
@@ -90,4 +91,5 @@ multi-container-services-prod/
 
 ## Deployment
 
-See **[DEPLOY.md](./DEPLOY.md)** for prerequisites, `cdk bootstrap`, deployment commands, GitHub Actions OIDC setup, estimated monthly costs, and `cdk destroy` teardown instructions.
+- **[AWS.md](./AWS.md)** — Required AWS & GitHub setup before your first push (ACM cert in `us-east-1`, CDK bootstrap, GitHub OIDC IAM role, repository variables, and DNS).
+- **[DEPLOY.md](./DEPLOY.md)** — Local CDK commands (`synth`, `diff`, `deploy`, `destroy`), production hardening checklist, and estimated monthly costs.

@@ -9,7 +9,11 @@ const redis = require("redis");
 // ============================================================================
 const app = express();
 app.disable("x-powered-by");
-app.use(cors());
+app.use(
+  cors({
+    origin: keys.clientOrigin,
+  })
+);
 app.use(express.json());
 
 // ============================================================================

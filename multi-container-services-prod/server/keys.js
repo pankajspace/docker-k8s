@@ -1,6 +1,7 @@
 // Environment configuration for the production Express API running on ECS Fargate.
 module.exports = {
   port: Number(process.env.PORT) || 5000,
+  clientOrigin: process.env.CLIENT_ORIGIN || "https://fib2.techtoday.click",
 
   // Redis / ElastiCache for Valkey connection settings
   redisHost: process.env.REDIS_HOST,
