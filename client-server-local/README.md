@@ -73,11 +73,11 @@ flowchart TB
 
 - Launches both Vite HMR (`:3000`) and Express `nodemon` (`:5000`) with a single `docker compose up --build` command.
 - Requires no Node.js installation on the host machine and keeps the Node.js runtime consistent.
-- Matches the dev workflow of `client-server-nginx-local` and `multi-container-services-local`.
+- Matches the dev workflow of `multi-container-services-local`.
 
 ### Why CORS Is Required Here
 
-Unlike `client-server-nginx-local` (where Nginx serves both `/` and `/api/*` under the same origin `http://localhost:3050`), this setup serves the frontend from `http://localhost:3000` and the backend from `http://localhost:5000`. Because the ports differ, browsers treat API requests as **cross-origin**, so `app.use(cors())` in [`server/index.js`](./server/index.js) is required for `fetch()` calls to succeed.
+Unlike a reverse-proxied setup (such as `multi-container-services-local`, where Nginx serves both `/` and `/api/*` under the same origin `http://localhost:3050`), this setup serves the frontend from `http://localhost:3000` and the backend from `http://localhost:5000`. Because the ports differ, browsers treat API requests as **cross-origin**, so `app.use(cors())` in [`server/index.js`](./server/index.js) is required for `fetch()` calls to succeed.
 
 ## Quick Start
 
