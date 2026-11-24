@@ -3,7 +3,7 @@
 Production-ready AWS deployment of the Fibonacci calculator app using a **split custom-domain architecture** configured manually in the AWS Console:
 
 - **Frontend (`https://fib1.techtoday.click`):** Static React + Vite SPA hosted in a private **Amazon S3** bucket and served globally over HTTPS via **Amazon CloudFront** (OAC) + **AWS ACM** (`us-east-1`).
-- **Backend (`https://api.fib1.techtoday.click`):** Containerized Express API running on **Amazon EC2** behind **Caddy**, which automatically provisions and renews Let's Encrypt HTTPS certificates and proxies requests to the private `api:5000` container.
+- **Backend (`https://api.fib1.techtoday.click`):** Containerized Express API running on **Amazon EC2** behind **Nginx** + **Certbot**, which automatically provisions and renews Let's Encrypt HTTPS certificates and reverse-proxies requests to the private `api:5000` container.
 - **Storage:** In-memory JavaScript structures (`seenIndexes`, `calculatedValues`) inside the single EC2 API container.
 
 > **Note:** Because data is stored in memory, keep the backend at **1 container instance** on EC2. Submitted values reset if the `api` container restarts. For persistence or horizontal scaling, replace the in-memory store with Amazon DynamoDB or RDS + ElastiCache.
@@ -23,13 +23,13 @@ flowchart LR
     end
 
     subgraph Backend["AWS EC2 (Elastic IP -> api.fib1.techtoday.click)"]
-        Caddy["Caddy 2 (Docker)\n:80 / :443 Auto HTTPS"]
+        Nginx["Nginx + Certbot (Docker)\n:80 / :443 Let's Encrypt HTTPS"]
         API["Express API (Docker)\nInternal :5000\nCORS + In-Memory Store"]
-        Caddy -->|"reverse_proxy api:5000"| API
+        Nginx -->|"proxy_pass http://api:5000"| API
     end
 
     User -->|"HTTPS GET /, /otherpage"| CF
-    User -->|"HTTPS CORS GET/POST /values"| Caddy
+    User -->|"HTTPS CORS GET/POST /values"| Nginx
 ```
 
 ---
@@ -38,12 +38,12 @@ flowchart LR
 
 ```text
 .github/workflows/
-└── client-server-prod.yml     # CI/CD workflow (S3 + CloudFront frontend, EC2 + Caddy backend)
+└── client-server-prod.yml     # CI/CD workflow (S3 + CloudFront frontend, EC2 + Nginx backend)
 
 client-server-prod/
 ├── README.md                  # Architecture overview
 ├── AWS.md                     # Manual AWS Console setup guide (ACM, S3, CloudFront, EC2, DNS, IAM)
-├── DEPLOY.md                  # Step-by-step frontend sync, EC2/Caddy deploy, CI/CD, and teardown guide
+├── DEPLOY.md                  # Step-by-step frontend sync, EC2/Nginx deploy, CI/CD, and teardown guide
 ├── client/                    # React 18 + Vite SPA (builds to static dist/ for S3)
 │   ├── .env.example           # Example VITE_API_URL for production builds
 │   ├── package.json           # Includes `npm run build` for static output
@@ -55,8 +55,10 @@ client-server-prod/
 │   └── package.json           # Includes `npm start`
 └── ec2/                       # EC2 production runtime stack
     ├── .env.example           # API_DOMAIN, CLIENT_ORIGIN, ACME_EMAIL
-    ├── Caddyfile              # Automatic Let's Encrypt HTTPS + reverse proxy to api:5000
-    └── docker-compose.prod.yml
+    ├── docker-compose.prod.yml # Express API + Nginx + Certbot stack
+    └── nginx/
+        ├── default.conf.template # HTTPS reverse proxy to api:5000 + ACME challenge
+        └── entrypoint.sh         # Bootstraps HTTP-only for Certbot, then enables HTTPS & reloads
 ```
 
 ---
@@ -66,9 +68,9 @@ client-server-prod/
 | Area | `client-server-local` | `client-server-prod` |
 | :--- | :--- | :--- |
 | **Frontend serving** | Vite dev server in Docker (`:3000`) | Static `vite build` output on **S3 + CloudFront** (`https://fib1.techtoday.click`) |
-| **Backend serving** | `nodemon` in Docker (`:5000` exposed) | Production `Dockerfile` (`node index.js`, non-root) behind **Caddy** (`:443` HTTPS, `:5000` private) |
+| **Backend serving** | `nodemon` in Docker (`:5000` exposed) | Production `Dockerfile` (`node index.js`, non-root) behind **Nginx** (`:443` HTTPS, `:5000` private) |
 | **CORS** | Open `cors()` | Strict origin allowlist via `CLIENT_ORIGIN` |
-| **HTTPS / TLS** | Local HTTP only | **ACM (`us-east-1`)** on CloudFront + **Caddy Auto-HTTPS (Let's Encrypt)** on EC2 |
+| **HTTPS / TLS** | Local HTTP only | **ACM (`us-east-1`)** on CloudFront + **Nginx + Certbot (Let's Encrypt)** on EC2 |
 | **Process lifecycle** | Dev auto-restart | `restart: unless-stopped`, Docker `HEALTHCHECK`, graceful `SIGTERM`/`SIGINT` shutdown |
 
 ---
@@ -76,4 +78,4 @@ client-server-prod/
 ## Deployment
 
 - **[AWS.md](./AWS.md)** — Manual AWS Console setup guide (ACM `us-east-1`, S3 + OAC, CloudFront, EC2 + Elastic IP + Security Group, DNS, GitHub OIDC IAM role, costs & teardown).
-- **[DEPLOY.md](./DEPLOY.md)** — Step-by-step frontend build/sync, EC2/Caddy deployment, verification, and GitHub Actions CI/CD.
+- **[DEPLOY.md](./DEPLOY.md)** — Step-by-step frontend build/sync, EC2/Nginx deployment, verification, and GitHub Actions CI/CD.

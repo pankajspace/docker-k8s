@@ -63,8 +63,10 @@ rsync -avz --delete --exclude '.env' -e "ssh -i $SSH_KEY" \
   client-server-prod/ec2/ "ec2-user@${EC2_IP}:~/client-server-prod/ec2/"
 
 ssh -i "$SSH_KEY" "ec2-user@${EC2_IP}" \
-  "cd ~/client-server-prod/ec2 && docker compose -f docker-compose.prod.yml up -d --build && docker image prune -f"
+  "cd ~/client-server-prod/ec2 && docker compose -f docker-compose.prod.yml up -d --build --remove-orphans && docker image prune -f"
 ```
+
+> **First boot note:** On initial startup, Nginx serves port `80` for Certbot's Let's Encrypt HTTP-01 challenge, then automatically switches to HTTPS (`:443`) and reloads once Certbot issues the certificate (usually ~15–30 seconds).
 
 ---
 

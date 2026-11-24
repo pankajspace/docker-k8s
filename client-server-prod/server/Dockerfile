@@ -1,4 +1,4 @@
-# Production Dockerfile for the Express API server (deployed on AWS EC2 behind Caddy).
+# Production Dockerfile for the Express API server (deployed on AWS EC2 behind Nginx).
 
 FROM node:22-alpine
 

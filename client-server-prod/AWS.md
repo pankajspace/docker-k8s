@@ -11,8 +11,8 @@ Follow this checklist to provision all AWS resources manually before your first 
 | **ACM Certificate** | `us-east-1` *(required)* | TLS certificate for `fib1.techtoday.click` on CloudFront |
 | **Amazon S3 Bucket** | Target region | Private static hosting for `client/dist/` |
 | **Amazon CloudFront Distribution** | Global | HTTPS CDN with OAC to S3 + SPA routing fallback |
-| **EC2 Key Pair & Security Group** | Target region | SSH access (`22`) and Caddy HTTP/HTTPS (`80`, `443` TCP/UDP) |
-| **EC2 Instance (`t4g.micro`) + Elastic IP** | Target region | Runs Express API + Caddy 2 via Docker Compose |
+| **EC2 Key Pair & Security Group** | Target region | SSH access (`22`) and Nginx HTTP/HTTPS (`80`, `443` TCP) |
+| **EC2 Instance (`t4g.micro`) + Elastic IP** | Target region | Runs Express API + Nginx + Certbot via Docker Compose |
 | **DNS Records** | DNS provider / Route 53 | `fib1.techtoday.click` -> CloudFront, `api.fib1.techtoday.click` -> Elastic IP |
 | **GitHub OIDC Provider + IAM Role** | Global (IAM) | Passwordless CI/CD deploys to S3 + CloudFront |
 
@@ -28,7 +28,7 @@ Follow this checklist to provision all AWS resources manually before your first 
 4. **Validation method:** **DNS validation** → click **Request**.
 5. Add the validation CNAME record to your DNS provider for `techtoday.click` (keep it permanently for auto-renewal) and wait until **Status = Issued**.
 
-*(No ACM certificate is needed for `api.fib1.techtoday.click` — Caddy provisions and renews Let's Encrypt TLS automatically on EC2.)*
+*(No ACM certificate is needed for `api.fib1.techtoday.click` — Certbot provisions and renews Let's Encrypt TLS certificates automatically for Nginx on EC2.)*
 
 ---
 
@@ -83,9 +83,8 @@ Follow this checklist to provision all AWS resources manually before your first 
 1. Open **EC2 → Network & Security → Security Groups → Create security group**.
 2. Name: `fib1-api-ec2-sg`, VPC: your default (or public) VPC.
 3. **Inbound rules:**
-   - **HTTP** — TCP `80` — `0.0.0.0/0` *(Caddy ACME HTTP-01 challenge & HTTPS redirect)*
-   - **HTTPS** — TCP `443` — `0.0.0.0/0` *(HTTPS API traffic)*
-   - **Custom UDP** — UDP `443` — `0.0.0.0/0` *(HTTP/3 / QUIC traffic for Caddy)*
+   - **HTTP** — TCP `80` — `0.0.0.0/0` *(Certbot ACME HTTP-01 challenge & Nginx HTTPS redirect)*
+   - **HTTPS** — TCP `443` — `0.0.0.0/0` *(HTTPS API traffic via Nginx)*
    - **SSH** — TCP `22` — `0.0.0.0/0` *(needed for GitHub-hosted runners; restrict to `<YOUR_IP>/32` if deploying only from your machine)*
 4. **Outbound rules:** Allow all outbound traffic (`0.0.0.0/0`).
 
@@ -138,9 +137,9 @@ Create the following DNS records in Route 53 or your external DNS provider:
 | Hostname | Record Type | Target / Value | Notes |
 | :--- | :--- | :--- | :--- |
 | `fib1.techtoday.click` | **A / AAAA (Alias)** in Route 53 *or* **CNAME** externally | `<CloudFrontDomainName>` (e.g. `d1234abcd.cloudfront.net`) | Cloudflare: set to **DNS only (gray cloud)** |
-| `api.fib1.techtoday.click` | **A** | `<Ec2ElasticIp>` | Required for Caddy Let's Encrypt HTTPS |
+| `api.fib1.techtoday.click` | **A** | `<Ec2ElasticIp>` | Required for Certbot / Nginx Let's Encrypt HTTPS |
 
-> **Note:** Make sure `api.fib1.techtoday.click` resolves to `<Ec2ElasticIp>` before starting Caddy on EC2 so Let's Encrypt can issue the TLS certificate on the first attempt.
+> **Note:** Make sure `api.fib1.techtoday.click` resolves to `<Ec2ElasticIp>` before starting the Docker Compose stack on EC2 so Certbot can issue the Let's Encrypt TLS certificate on the first attempt.
 
 ---
 

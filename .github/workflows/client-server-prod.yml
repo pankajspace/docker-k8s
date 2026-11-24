@@ -85,7 +85,7 @@ jobs:
             --paths "/*"
 
   deploy-server:
-    name: Deploy Backend (EC2 + Caddy)
+    name: Deploy Backend (EC2 + Nginx)
     if: github.event_name != 'workflow_dispatch' || inputs.target == 'both' || inputs.target == 'server'
     runs-on: ubuntu-latest
 
@@ -137,7 +137,7 @@ jobs:
               echo "ERROR: ~/client-server-prod/ec2/.env is missing on EC2."
               exit 1
             fi
-            docker compose -f docker-compose.prod.yml up -d --build
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
             docker image prune -f
           EOF
 

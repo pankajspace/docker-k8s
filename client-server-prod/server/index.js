@@ -1,5 +1,5 @@
 // ============================================================================
-// Express Production API Setup (AWS EC2 + Caddy Reverse Proxy)
+// Express Production API Setup (AWS EC2 + Nginx Reverse Proxy)
 // ============================================================================
 const express = require("express");
 const cors = require("cors");
@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT) || 5000;
 
 // Hide Express version header in production responses.
 app.disable("x-powered-by");
-// Trust the first proxy hop (Caddy) so req.ip and req.protocol reflect the client.
+// Trust the first proxy hop (Nginx) so req.ip and req.protocol reflect the client.
 app.set("trust proxy", 1);
 
 // Allow cross-origin requests only from configured frontend origins (comma-separated).

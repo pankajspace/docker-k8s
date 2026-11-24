@@ -1,6 +1,6 @@
-# Production Docker Compose stack for AWS EC2 (Express API + Caddy automatic HTTPS).
+# Production Docker Compose stack for AWS EC2 (Express API + Nginx + Certbot HTTPS).
 # Run from the ec2/ directory after creating .env from .env.example:
-#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 
 services:
   # Express API server — kept private on the internal Docker network (not exposed to host).
@@ -16,28 +16,64 @@ services:
     expose:
       - "5000"
 
-  # Caddy reverse proxy — terminates HTTPS on :443 with automatic Let's Encrypt certificates
-  # and forwards traffic to api:5000 over the internal Docker network.
-  caddy:
-    image: caddy:2-alpine
+  # Nginx reverse proxy — terminates HTTPS on :443 using Let's Encrypt certificates
+  # provisioned by Certbot and forwards traffic to api:5000 over the internal Docker network.
+  nginx:
+    image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
     environment:
       - API_DOMAIN=${API_DOMAIN}
-      - ACME_EMAIL=${ACME_EMAIL:-}
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/entrypoint.sh:/etc/nginx/entrypoint.sh:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    entrypoint: ["/bin/sh", "/etc/nginx/entrypoint.sh"]
 
-# Named volumes persist TLS certificates and Caddy state across container restarts/rebuilds
+  # Certbot — issues the initial Let's Encrypt certificate via HTTP-01 webroot challenge
+  # and renews it automatically every 12 hours.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    environment:
+      - API_DOMAIN=${API_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: >
+      /bin/sh -c '
+      trap exit TERM;
+      while :; do
+        if [ ! -f "/etc/letsencrypt/live/$${API_DOMAIN}/fullchain.pem" ]; then
+          sleep 5;
+          if [ -n "$${ACME_EMAIL}" ]; then
+            EMAIL_ARGS="--email $${ACME_EMAIL}";
+          else
+            EMAIL_ARGS="--register-unsafely-without-email";
+          fi;
+          certbot certonly --webroot -w /var/www/certbot \
+            -d "$${API_DOMAIN}" \
+            $$EMAIL_ARGS \
+            --agree-tos --non-interactive && continue;
+          sleep 15m & wait $${!};
+        else
+          certbot renew --webroot -w /var/www/certbot --quiet || true;
+          sleep 12h & wait $${!};
+        fi;
+      done
+      '
+
+# Named volumes persist ACME challenge files and TLS certificates across container restarts/rebuilds
 # so you don't hit Let's Encrypt rate limits.
 volumes:
-  caddy_data:
-  caddy_config:
+  certbot_www:
+  certbot_conf:
