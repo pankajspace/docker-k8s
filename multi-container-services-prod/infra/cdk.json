@@ -1,0 +1,12 @@
+{
+  "app": "npx tsx bin/multi-container-services-prod.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "**/*.d.ts", "**/*.js", "tsconfig.json", "package*.json", "node_modules", "cdk.out"]
+  },
+  "context": {
+    "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,
+    "@aws-cdk/aws-ecs:enableExecuteCommand": true,
+    "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true
+  }
+}
