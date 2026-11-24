@@ -111,7 +111,7 @@ docker compose down -v
 ### Option A: Run Client Tests via Docker
 
 ```bash
-docker build -t multi-client-test -f ./client/Dockerfile.dev ./client
+docker build -t multi-client-test ./client
 docker run multi-client-test npm test
 ```
 

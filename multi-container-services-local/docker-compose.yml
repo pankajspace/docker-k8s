@@ -25,9 +25,9 @@ services:
       - client
     # Automatically restarts nginx whenever it exits (e.g., if upstream services aren't ready on first boot).
     restart: always
-    # Build the Nginx image locally from ./nginx/Dockerfile.dev using ./nginx as the build context.
+    # Build the Nginx image locally from ./nginx/Dockerfile using ./nginx as the build context.
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       context: ./nginx
     ports:
       # Maps host port 3050 to container port 80 (open http://localhost:3050 in your browser).
@@ -35,9 +35,9 @@ services:
 
   # Express REST API server (container port 5000) coordinating requests between Postgres and Redis.
   api:
-    # Build the API dev image from ./server/Dockerfile.dev using ./server as the build context.
+    # Build the API dev image from ./server/Dockerfile using ./server as the build context.
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       context: ./server
     volumes:
       # Anonymous volume preserves the container's /app/node_modules so the bind mount below doesn't hide it.
@@ -57,9 +57,9 @@ services:
 
   # React Single-Page Application dev server (Vite on container port 3000, proxied by nginx).
   client:
-    # Build the frontend dev image from ./client/Dockerfile.dev using ./client as the build context.
+    # Build the frontend dev image from ./client/Dockerfile using ./client as the build context.
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       context: ./client
     volumes:
       # Anonymous volume preserves the container's /app/node_modules from being overwritten by the bind mount.
@@ -69,9 +69,9 @@ services:
 
   # Background worker subscribed to Redis 'insert' events to asynchronously calculate Fibonacci values.
   worker:
-    # Build the worker dev image from ./worker/Dockerfile.dev using ./worker as the build context.
+    # Build the worker dev image from ./worker/Dockerfile using ./worker as the build context.
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       context: ./worker
     volumes:
       # Anonymous volume preserves the container's /app/node_modules from being overwritten by the bind mount.

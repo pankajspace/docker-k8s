@@ -6,9 +6,9 @@
 services:
   # Express REST API server (container port 5000) handling Fibonacci calculation and in-memory storage.
   api:
-    # Build the API dev image from ./server/Dockerfile.dev using ./server as the build context.
+    # Build the API dev image from ./server/Dockerfile using ./server as the build context.
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       context: ./server
     ports:
       # Maps host port 5000 to container port 5000 so the browser can call http://localhost:5000 directly.
@@ -24,9 +24,9 @@ services:
     # Starts api before client so the backend endpoint is ready when the UI loads.
     depends_on:
       - api
-    # Build the frontend dev image from ./client/Dockerfile.dev using ./client as the build context.
+    # Build the frontend dev image from ./client/Dockerfile using ./client as the build context.
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       context: ./client
     ports:
       # Maps host port 3000 to container port 3000 (open http://localhost:3000 in your browser).

@@ -91,7 +91,7 @@ flowchart TD
 
 ### 2.2 React Client Frontend (`client/`)
 
-The frontend is a React 18 SPA using `react-router-dom` for client-side navigation and `axios` to communicate with the backend through relative `/api/*` paths. In local development it runs via Vite's dev server (`client/Dockerfile.dev`) with live Hot Module Replacement (HMR).
+The frontend is a React 18 SPA using `react-router-dom` for client-side navigation and `axios` to communicate with the backend through relative `/api/*` paths. In local development it runs via Vite's dev server (`client/Dockerfile`) with live Hot Module Replacement (HMR).
 
 #### Component & API Interaction
 
@@ -226,7 +226,7 @@ flowchart TB
     end
 
     subgraph Net["Docker Compose Network (Internal DNS by Service Name)"]
-        subgraph NginxBox["Container: nginx (Dockerfile.dev)"]
+        subgraph NginxBox["Container: nginx (Dockerfile)"]
             N80["Port 80 (Exposed as Host :3050)\nrestart: always"]
             NRoot["location / -> client:3000"]
             NWS["location /ws -> client:3000\n(WebSocket Upgrade)"]
@@ -236,20 +236,20 @@ flowchart TB
             N80 --> NAPI
         end
 
-        subgraph ClientBox["Container: client (Dockerfile.dev)"]
+        subgraph ClientBox["Container: client (Dockerfile)"]
             C3000["Port 3000\nVite Dev Server"]
             CRouter["App.jsx (BrowserRouter)\n/ -> Fib.jsx | /otherpage -> OtherPage.jsx"]
             C3000 --> CRouter
         end
 
-        subgraph APIBox["Container: api (server/Dockerfile.dev)"]
+        subgraph APIBox["Container: api (server/Dockerfile)"]
             A5000["Express on Port 5000\ncors + body-parser\nEnv: REDIS_HOST, REDIS_PORT,\nPGUSER, PGHOST, PGDATABASE,\nPGPASSWORD, PGPORT"]
             ARoutes["Routes:\nGET /\nGET /values/all\nGET /values/current\nPOST /values (validates index <= 40)"]
             AClients["Clients:\npg.Pool (auto-creates values table)\nredisClient + redisPublisher.duplicate()"]
             A5000 --> ARoutes --> AClients
         end
 
-        subgraph WorkerBox["Container: worker (worker/Dockerfile.dev)"]
+        subgraph WorkerBox["Container: worker (worker/Dockerfile)"]
             WProc["Node.js Process (nodemon in dev)\nEnv: REDIS_HOST, REDIS_PORT"]
             WClients["redisClient + sub.duplicate()\nsub.subscribe('insert')"]
             WFib["fib(index): recursive O(2^n)"]
@@ -377,22 +377,22 @@ docker-k8s/
     ├── docker-compose.yml                    # Local multi-container dev orchestration
     ├── nginx/
     │   ├── default.conf                      # Reverse proxy rules (/, /ws, /api)
-    │   └── Dockerfile.dev                    # Development Nginx proxy image
+    │   └── Dockerfile                    # Development Nginx proxy image
     ├── client/
     │   ├── vite.config.js                    # Vite dev server, build & Vitest config
     │   ├── index.html                        # Vite SPA entry HTML
-    │   ├── Dockerfile.dev                    # Vite development server image
+    │   ├── Dockerfile                    # Vite development server image
     │   └── src/
     │       ├── index.jsx                     # React 18 root entry point
     │       ├── App.jsx                       # Client-side router & layout
     │       ├── Fib.jsx                       # Fibonacci form, API fetches, and results display
     │       └── OtherPage.jsx                 # Secondary route to verify SPA routing
     ├── server/
-    │   ├── Dockerfile.dev                    # Development Express API image (nodemon)
+    │   ├── Dockerfile                    # Development Express API image (nodemon)
     │   ├── keys.js                           # Env-var config for Redis & Postgres
     │   └── index.js                          # Express routes, Postgres Pool, Redis client/publisher
     └── worker/
-        ├── Dockerfile.dev                    # Development Worker image (nodemon)
+        ├── Dockerfile                    # Development Worker image (nodemon)
         ├── keys.js                           # Env-var config for Redis
         └── index.js                          # Redis subscriber & recursive Fibonacci calculator
 ```
