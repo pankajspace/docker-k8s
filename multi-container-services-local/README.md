@@ -1,6 +1,8 @@
 # Multi-Container Services Architecture
 
-A multi-container Fibonacci calculator web application built to demonstrate **Docker Compose orchestration**, **Nginx reverse proxy routing**, **multi-stage production builds**, **asynchronous event-driven processing via Redis Pub/Sub**, and **polyglot persistence (PostgreSQL + Redis)**.
+A multi-container Fibonacci calculator web application built to demonstrate **local Docker Compose orchestration**, **Nginx reverse proxy routing**, **asynchronous event-driven processing via Redis Pub/Sub**, and **polyglot persistence (PostgreSQL + Redis)**.
+
+> **Looking for the production AWS deployment?** See [`../multi-container-services-prod`](../multi-container-services-prod).
 
 > **Why is this intentionally over-engineered for a Fibonacci calculator?**
 > Computing Fibonacci recursively (`O(2^n)`) simulates a CPU-intensive background job. Separating the web frontend, REST API, background worker, in-memory cache/broker, and relational database mirrors real-world microservice patterns.
@@ -76,7 +78,7 @@ flowchart TD
     Proxy -->|"Matches: /ws"| R2["location /ws\n(HTTP/1.1 + Upgrade Headers)"]
     Proxy -->|"Matches: /api"| R3["location /api\nrewrite /api/(.*) /$1 break"]
 
-    R1 -->|"proxy_pass http://client"| UpClient["Upstream: client:3000\n(React Dev Server / Prod Nginx)"]
+    R1 -->|"proxy_pass http://client"| UpClient["Upstream: client:3000\n(Vite Dev Server)"]
     R2 -->|"WebSocket Tunnel (HMR)"| UpClient
     R3 -->|"proxy_pass http://api\n(prefix '/api' stripped)"| UpAPI["Upstream: api:5000\n(Express Server)"]
 ```
@@ -89,7 +91,7 @@ flowchart TD
 
 ### 2.2 React Client Frontend (`client/`)
 
-The frontend is a React 18 SPA using `react-router-dom` for client-side navigation and `axios` to communicate with the backend through relative `/api/*` paths. It uses **two distinct Docker build strategies** for development vs. production.
+The frontend is a React 18 SPA using `react-router-dom` for client-side navigation and `axios` to communicate with the backend through relative `/api/*` paths. In local development it runs via Vite's dev server (`client/Dockerfile.dev`) with live Hot Module Replacement (HMR).
 
 #### Component & API Interaction
 
@@ -107,30 +109,6 @@ flowchart TD
     G2 --> API
     P1 --> API
 ```
-
-#### Development vs. Production Container Architecture
-
-```mermaid
-flowchart LR
-    subgraph Dev["Development (client/Dockerfile.dev)"]
-        D1["node:lts-alpine"] --> D2["npm install\n+ Bind Mount ./client:/app"]
-        D2 --> D3["CMD: npm run start\n(Vite Dev Server on :3000)"]
-    end
-
-    subgraph Prod["Production Multi-Stage (client/Dockerfile)"]
-        direction LR
-        subgraph Stage1["Stage 1: builder (node:lts-alpine)"]
-            P1["npm install"] --> P2["npm run build\n(/app/dist static bundle)"]
-        end
-        subgraph Stage2["Stage 2: runtime (nginx)"]
-            P3["Copy /app/dist ->\n/usr/share/nginx/html"] --> P4["client/nginx/default.conf\nListen :3000\ntry_files $uri $uri/ /index.html"]
-        end
-        P2 -->|"COPY --from=builder"| P3
-    end
-```
-
-> **Why `try_files $uri $uri/ /index.html;`?**
-> In production, navigating directly to `/otherpage` hits Nginx inside the `client` container. Because `/otherpage` is a React Router route (not a physical file on disk), `try_files` falls back to `index.html` so React Router can handle the path on the client.
 
 ---
 
@@ -258,8 +236,8 @@ flowchart TB
             N80 --> NAPI
         end
 
-        subgraph ClientBox["Container: client (Dockerfile.dev / Prod Multi-Stage)"]
-            C3000["Port 3000\nDev: Vite Dev Server\nProd: Nginx serving /app/dist"]
+        subgraph ClientBox["Container: client (Dockerfile.dev)"]
+            C3000["Port 3000\nVite Dev Server"]
             CRouter["App.jsx (BrowserRouter)\n/ -> Fib.jsx | /otherpage -> OtherPage.jsx"]
             C3000 --> CRouter
         end
@@ -381,7 +359,7 @@ sequenceDiagram
 
 ### Running Locally with Docker Compose
 
-For full installation, testing, production build, and troubleshooting instructions, see [SETUP.md](./SETUP.md).
+For full installation, testing, and troubleshooting instructions, see [SETUP.md](./SETUP.md).
 
 ```bash
 # Build images and start all 6 containers
@@ -399,26 +377,21 @@ docker-k8s/
     ├── docker-compose.yml                    # Local multi-container dev orchestration
     ├── nginx/
     │   ├── default.conf                      # Reverse proxy rules (/, /ws, /api)
-    │   ├── Dockerfile                        # Production Nginx proxy image
     │   └── Dockerfile.dev                    # Development Nginx proxy image
     ├── client/
     │   ├── vite.config.js                    # Vite dev server, build & Vitest config
     │   ├── index.html                        # Vite SPA entry HTML
-    │   ├── Dockerfile                        # Multi-stage Vite build -> Nginx (:3000)
     │   ├── Dockerfile.dev                    # Vite development server image
-    │   ├── nginx/default.conf                # Production SPA static server config (try_files)
     │   └── src/
     │       ├── index.jsx                     # React 18 root entry point
     │       ├── App.jsx                       # Client-side router & layout
     │       ├── Fib.jsx                       # Fibonacci form, API fetches, and results display
     │       └── OtherPage.jsx                 # Secondary route to verify SPA routing
     ├── server/
-    │   ├── Dockerfile                        # Production Express API image
     │   ├── Dockerfile.dev                    # Development Express API image (nodemon)
     │   ├── keys.js                           # Env-var config for Redis & Postgres
     │   └── index.js                          # Express routes, Postgres Pool, Redis client/publisher
     └── worker/
-        ├── Dockerfile                        # Production Worker image
         ├── Dockerfile.dev                    # Development Worker image (nodemon)
         ├── keys.js                           # Env-var config for Redis
         └── index.js                          # Redis subscriber & recursive Fibonacci calculator

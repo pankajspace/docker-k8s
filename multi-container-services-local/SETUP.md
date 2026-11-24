@@ -125,27 +125,7 @@ npm test
 
 ---
 
-## 6. Building Production Images
-
-Each custom service includes a production `Dockerfile` (with a multi-stage Node -> Nginx build for `client`):
-
-```bash
-docker build -t multi-client ./client
-docker build -t multi-nginx ./nginx
-docker build -t multi-server ./server
-docker build -t multi-worker ./worker
-```
-
-| Service | Production Dockerfile | Runtime Behavior |
-| :--- | :--- | :--- |
-| **`client`** | `./client/Dockerfile` | Stage 1 builds static Vite/React bundle (`/app/dist`); Stage 2 serves it via Nginx on port `3000` with SPA `try_files` fallback |
-| **`nginx`** | `./nginx/Dockerfile` | Nginx reverse proxy routing `/`, `/ws`, and `/api/*` |
-| **`server`** | `./server/Dockerfile` | Runs `node index.js` (Express on port `5000`) |
-| **`worker`** | `./worker/Dockerfile` | Runs `node index.js` (Redis `"insert"` subscriber) |
-
----
-
-## 7. Ports & Environment Variables Reference
+## 6. Ports & Environment Variables Reference
 
 ### Ports
 
@@ -172,7 +152,7 @@ docker build -t multi-worker ./worker
 
 ---
 
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 - **Port `3050` is already in use:** Change `'3050:80'` in `docker-compose.yml` (e.g., to `'3051:80'`) and restart with `docker compose up`.
 - **Added a new package to `package.json`, but container can't find it:** Because `/app/node_modules` is preserved as an anonymous volume, rebuild and recreate volumes with:
