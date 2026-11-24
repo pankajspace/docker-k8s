@@ -42,8 +42,14 @@ flowchart LR
 
 client-server-prod/
 ├── README.md                  # Architecture overview
-├── AWS.md                     # AWS services, console setup, IAM policy, DNS & cost checklist
-├── DEPLOY.md                  # Step-by-step deployment & GitHub Actions guide
+├── AWS.md                     # Pre-push AWS setup checklist (ACM, EC2 key pair, OIDC IAM, DNS)
+├── DEPLOY.md                  # Step-by-step CDK deploy, EC2 sync, and teardown guide
+├── infra/                     # AWS CDK (TypeScript) stack for S3, CloudFront, VPC, EC2 & Elastic IP
+│   ├── bin/client-server-prod.ts
+│   ├── lib/client-server-prod-stack.ts
+│   ├── cdk.json
+│   ├── package.json
+│   └── tsconfig.json
 ├── client/                    # React 18 + Vite SPA (builds to static dist/ for S3)
 │   ├── .env.example           # Example VITE_API_URL for production builds
 │   ├── package.json           # Includes `npm run build` for static output
