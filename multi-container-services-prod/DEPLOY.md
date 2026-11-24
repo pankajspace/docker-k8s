@@ -1,13 +1,13 @@
 # Deploying `multi-container-services-prod` to AWS
 
-This guide covers deploying the full stack (VPC, RDS for PostgreSQL, ElastiCache for Valkey Serverless, ECS Fargate `api` + `worker`, ALB, S3, and CloudFront) using **AWS CDK (TypeScript)**.
+Complete the manual AWS Console setup in **[AWS.md](./AWS.md)** first (ACM cert, VPC, Security Groups, RDS, ElastiCache Valkey, ECR, ALB, ECS Cluster/Services, S3 + CloudFront, and DNS).
 
 ---
 
-## Prerequisites
+## Prerequisites (For Manual Local Deploys)
 
 - **Node.js 22+** and **npm**
-- **Docker** running locally (CDK builds and pushes the `server/` and `worker/` container images to ECR during `cdk deploy`)
+- **Docker** running locally (with `docker buildx` support for building `linux/amd64` images on Apple Silicon)
 - **AWS CLI v2** authenticated (`aws login` or `aws configure sso`) — verify with:
   ```bash
   aws sts get-caller-identity
@@ -15,92 +15,121 @@ This guide covers deploying the full stack (VPC, RDS for PostgreSQL, ElastiCache
 
 ---
 
-## 1. Request an ACM Certificate in `us-east-1` (Mandatory for CloudFront)
-
-> **Critical:** CloudFront only accepts TLS certificates issued in **`us-east-1` (N. Virginia)**, even if you deploy your ECS/RDS stack to another region (e.g., `ap-south-1`).
-
-1. Open **AWS Certificate Manager (ACM)** in **`us-east-1`** → **Request a public certificate**.
-2. **Fully qualified domain name:** `fib2.techtoday.click`
-3. **Validation method:** **DNS validation** — add the CNAME validation record in Route 53 (or your DNS provider) and wait until **Status = Issued**.
-4. Copy the certificate ARN (e.g. `arn:aws:acm:us-east-1:<ACCOUNT_ID>:certificate/<UUID>`).
-
----
-
-## 2. Build the Frontend Static Bundle
-
-CDK deploys `client/dist/` to S3 and invalidates CloudFront automatically, so build the React bundle first:
+## 1. Build & Deploy the Frontend (S3 + CloudFront)
 
 ```bash
 cd multi-container-services-prod/client
 npm ci
 npm run build
+
+export FIB2_S3_BUCKET="<your-s3-bucket-name>"
+export FIB2_CLOUDFRONT_DISTRIBUTION_ID="<your-cloudfront-distribution-id>"
+
+# Upload hashed assets with long-lived immutable caching
+aws s3 sync dist/ "s3://${FIB2_S3_BUCKET}/" \
+  --delete \
+  --exclude "index.html" \
+  --cache-control "public,max-age=31536000,immutable"
+
+# Upload index.html with no-cache so new releases take effect immediately
+aws s3 cp dist/index.html "s3://${FIB2_S3_BUCKET}/index.html" \
+  --cache-control "no-cache,no-store,must-revalidate" \
+  --content-type "text/html"
+
+# Invalidate CloudFront cache
+aws cloudfront create-invalidation \
+  --distribution-id "${FIB2_CLOUDFRONT_DISTRIBUTION_ID}" \
+  --paths "/*"
 ```
 
 ---
 
-## 3. Install CDK Dependencies & Bootstrap (One-Time per Account/Region)
+## 2. Build & Push Container Images to ECR
+
+Set your AWS account ID, region, and ECR repository names:
 
 ```bash
-cd ../infra
-npm ci
-npx cdk bootstrap
-```
+export AWS_REGION="ap-south-1"
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+export IMAGE_TAG=$(git rev-parse --short HEAD)
 
-*(If deploying to a specific account/region, run `npx cdk bootstrap aws://<ACCOUNT_ID>/<REGION>`.)*
+# Authenticate Docker to Amazon ECR
+aws ecr get-login-password --region "$AWS_REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+# Build & push API image (linux/amd64 for ECS Fargate X86_64)
+docker build --platform linux/amd64 \
+  -t "${ECR_REGISTRY}/fib2-api:${IMAGE_TAG}" \
+  -t "${ECR_REGISTRY}/fib2-api:latest" \
+  multi-container-services-prod/server
+docker push "${ECR_REGISTRY}/fib2-api:${IMAGE_TAG}"
+docker push "${ECR_REGISTRY}/fib2-api:latest"
+
+# Build & push Worker image (linux/amd64 for ECS Fargate X86_64)
+docker build --platform linux/amd64 \
+  -t "${ECR_REGISTRY}/fib2-worker:${IMAGE_TAG}" \
+  -t "${ECR_REGISTRY}/fib2-worker:latest" \
+  multi-container-services-prod/worker
+docker push "${ECR_REGISTRY}/fib2-worker:${IMAGE_TAG}"
+docker push "${ECR_REGISTRY}/fib2-worker:latest"
+```
 
 ---
 
-## 4. Preview & Deploy with CDK
+## 3. Trigger Rolling ECS Fargate Deployments
 
-Export your `us-east-1` ACM certificate ARN (and optionally `ROUTE53_HOSTED_ZONE_ID` if `techtoday.click` is hosted in Route 53 so CDK creates the A/AAAA Alias records automatically):
+Because the `fib2-api` and `fib2-worker` task definitions reference `:latest`, forcing a new deployment pulls the newly pushed images and rolls out tasks with zero downtime:
 
 ```bash
-export ACM_CERTIFICATE_ARN="arn:aws:acm:us-east-1:<ACCOUNT_ID>:certificate/<UUID>"
-# Optional — only if techtoday.click is in Route 53:
-# export ROUTE53_HOSTED_ZONE_ID="ZXXXXXXXXXXXXX"
+aws ecs update-service \
+  --region "$AWS_REGION" \
+  --cluster fib2-cluster \
+  --service fib2-api-service \
+  --force-new-deployment
 
-npm run typecheck
-npm run synth
-npm run diff
-npm run deploy
+aws ecs update-service \
+  --region "$AWS_REGION" \
+  --cluster fib2-cluster \
+  --service fib2-worker-service \
+  --force-new-deployment
+
+# Wait for both services to stabilize
+aws ecs wait services-stable \
+  --region "$AWS_REGION" \
+  --cluster fib2-cluster \
+  --services fib2-api-service fib2-worker-service
 ```
 
-> **Note:** First deployment typically takes **10–15 minutes** (RDS PostgreSQL + CloudFront distribution creation). Never use `--hotswap` or `--express` for production deployments.
+---
 
-### Point DNS to CloudFront (if not using Route 53 auto-records)
+## 4. Verify
 
-When `cdk deploy` finishes, copy the **`CloudFrontDomainName`** output (e.g., `d1234abcd.cloudfront.net`) and create this record in your DNS provider for `techtoday.click`:
+```bash
+curl -i https://fib2.techtoday.click/api/values/all
+```
 
-| Hostname | Record Type | Target / Value | Notes |
-| :--- | :--- | :--- | :--- |
-| `fib2.techtoday.click` | **A (Alias)** in Route 53 *or* **CNAME** externally | `<CloudFrontDomainName>` | If using Cloudflare DNS, set to **DNS only (gray cloud)** |
-
-Then open **`https://fib2.techtoday.click`** in your browser.
+Open **`https://fib2.techtoday.click`** in your browser and submit an index. Refresh the page to verify that the value was computed by the `worker` via Valkey Pub/Sub and persisted in RDS PostgreSQL.
 
 ---
 
 ## 5. Production Hardening Checklist
 
-The stack defaults are tuned so a starter/learning deployment is easy to tear down and keeps costs moderate. Before running real production traffic, update `infra/lib/multi-container-services-prod-stack.ts`:
+Before running real production traffic, tighten these starter defaults in the AWS Console:
 
-- **VPC NAT Gateways:** Increase `natGateways: 1` -> `2` for Multi-AZ high availability.
-- **RDS PostgreSQL:** Set `multiAz: true`, `deletionProtection: true`, and `removalPolicy: cdk.RemovalPolicy.SNAPSHOT`.
-- **ECS Fargate:** Set `desiredCount: 2` on `ApiService` (and optionally `WorkerService`) and attach target-tracking auto scaling.
+- **VPC NAT Gateways:** Deploy 1 NAT Gateway per AZ (2 total) for Multi-AZ high availability.
+- **RDS PostgreSQL:** Enable **Multi-AZ**, **Deletion protection**, and final snapshots.
+- **ECS Fargate:** Increase `desiredCount` to `2`+ on `fib2-api-service` (and optionally `fib2-worker-service`) and attach CPU/memory target-tracking auto scaling.
+- **Immutable Image Tags:** For strict release traceability, pin task definition revisions to `${IMAGE_TAG}` instead of `:latest`.
 
 ---
 
-## 6. GitHub Actions CI/CD (AWS OIDC)
+## 6. Automated CI/CD (GitHub Actions)
 
-The workflow at [`.github/workflows/multi-container-services-prod.yml`](../.github/workflows/multi-container-services-prod.yml) deploys automatically on pushes to `main` (or via manual **workflow_dispatch**) using **GitHub OIDC** (no static AWS access keys).
+Once you configure the GitHub Repository Variables listed in **[AWS.md](./AWS.md#10-add-github-repository-variables)**, pushing to `main` (touching `multi-container-services-prod/**`) or manually running [`.github/workflows/multi-container-services-prod.yml`](../.github/workflows/multi-container-services-prod.yml) via **workflow_dispatch** will automatically:
 
-### Setup Steps
-1. Create an **IAM OIDC Identity Provider** in AWS for `https://token.actions.githubusercontent.com` (audience `sts.amazonaws.com`).
-2. Create an **IAM Role** trusted by your repository (`repo:<ORG>/<REPO>:ref:refs/heads/main`) with permissions to assume the CDK bootstrap roles (`sts:AssumeRole` on `arn:aws:iam::<ACCOUNT_ID>:role/cdk-*`).
-3. Add the following **Repository Variables** in GitHub (`Settings -> Secrets and variables -> Actions -> Variables`):
-   - `AWS_REGION` — e.g. `ap-south-1` or `us-east-1`
-   - `AWS_OIDC_ROLE_ARN` — ARN of the IAM role created above
-   - `ACM_CERTIFICATE_ARN` — ARN of the issued `us-east-1` ACM cert for `fib2.techtoday.click`
-   - `ROUTE53_HOSTED_ZONE_ID` *(optional)* — Route 53 Hosted Zone ID for `techtoday.click`
+1. Build the React SPA, sync `client/dist/` to S3, and invalidate CloudFront (`deploy-client`).
+2. Validate `server/` and `worker/` syntax, build and push `linux/amd64` images to ECR, trigger rolling ECS Fargate deployments, and wait for service stability (`deploy-services`).
 
 ---
 
@@ -113,16 +142,21 @@ The workflow at [`.github/workflows/multi-container-services-prod.yml`](../.gith
 | RDS PostgreSQL (`db.t4g.micro`, 20 GB) | ~\$15 *(eligible for new-account AWS Free Tier credits)* |
 | ECS Fargate (2x 0.25 vCPU / 0.5 GB tasks) | ~\$18 |
 | ElastiCache for Valkey Serverless (100 MB floor) | ~\$6+ |
-| S3 + CloudFront + Secrets Manager + CloudWatch | ~\$1–3 |
+| S3 + CloudFront + Secrets Manager + ECR + CloudWatch | ~\$1–3 |
 | **Total (running 24/7)** | **~\$90–95/month** |
 
 ---
 
-## 8. Teardown (Avoid Ongoing Charges)
+## 8. Manual Teardown (Avoid Ongoing Charges)
 
-To delete all AWS resources created by the stack (including the S3 bucket, RDS instance, ElastiCache cache, ECS services, ALB, and VPC):
+Delete resources in this order to avoid dependency errors:
 
-```bash
-cd multi-container-services-prod/infra
-npm run destroy
-```
+1. **CloudFront:** Disable and delete the distribution.
+2. **S3:** Empty and delete `fib2-techtoday-click-frontend`.
+3. **ECS:** Delete `fib2-api-service` and `fib2-worker-service` (scale to 0 or force delete), then delete `fib2-cluster`.
+4. **ALB & Target Group:** Delete `fib2-api-alb`, then delete `fib2-api-tg`.
+5. **RDS:** Delete `fib2-postgres` (uncheck final snapshot if not needed) and delete `fib2-rds-subnets`.
+6. **ElastiCache:** Delete `fib-valkey-serverless` and delete `fib2-valkey-subnets`.
+7. **ECR:** Delete `fib2-api` and `fib2-worker` repositories.
+8. **VPC & NAT Gateway:** Delete the NAT Gateway, **Release its Elastic IP**, then delete `fib2-vpc` (which cleans up subnets, route tables, IGW, and security groups).
+9. **DNS, Logs & ACM:** Remove the `fib2.techtoday.click` DNS record, delete CloudWatch log groups, and delete the `us-east-1` ACM certificate if no longer needed.

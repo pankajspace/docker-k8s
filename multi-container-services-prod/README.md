@@ -1,10 +1,11 @@
 # Multi-Container Services Prod (AWS Architecture)
 
-Production-ready AWS deployment of the multi-container Fibonacci calculator application provisioned with **AWS CDK (TypeScript)** using a **single-origin CloudFront architecture** at **`https://fib2.techtoday.click`**:
+Production-ready AWS deployment of the multi-container Fibonacci calculator application configured manually in the AWS Console using a **single-origin CloudFront architecture** at **`https://fib2.techtoday.click`**:
 
 - **Frontend (`https://fib2.techtoday.click/*`):** Static React 18 + Vite SPA stored in a private **Amazon S3** bucket and served over HTTPS via **Amazon CloudFront** (OAC + **ACM** certificate in `us-east-1`).
 - **API Routing (`https://fib2.techtoday.click/api/*`):** CloudFront forwards `/api/*` requests to an **Application Load Balancer (ALB)** in public subnets (protected by an `X-Origin-Verify` header), which routes to the private **ECS Fargate** `api` service on port `5000`.
 - **Background Worker:** Separate **ECS Fargate** `worker` service in private subnets (no exposed ports) subscribed to Valkey Pub/Sub `"insert"` events to compute Fibonacci values asynchronously.
+- **Container Registry:** **Amazon ECR** repositories (`fib2-api` and `fib2-worker`) storing production `linux/amd64` container images.
 - **Managed Data Layer:** **Amazon RDS for PostgreSQL 16** (credentials injected via **AWS Secrets Manager**) and **Amazon ElastiCache for Valkey Serverless** (TLS-encrypted) in isolated private subnets.
 
 ---
@@ -43,12 +44,12 @@ flowchart LR
 
 ```text
 .github/workflows/
-└── multi-container-services-prod.yml   # CI/CD: build client, validate server/worker, CDK deploy via OIDC
+└── multi-container-services-prod.yml   # CI/CD: S3/CloudFront frontend + ECR push & ECS Fargate deploy
 
 multi-container-services-prod/
 ├── README.md                           # Architecture overview and differences from local
-├── AWS.md                              # Pre-push AWS setup checklist (ACM, CDK bootstrap, OIDC IAM, DNS)
-├── DEPLOY.md                           # Step-by-step CDK bootstrap, deploy, CI/CD, and teardown guide
+├── AWS.md                              # Manual AWS Console setup guide (VPC, RDS, Valkey, ECR, ECS, ALB, S3, CloudFront, IAM)
+├── DEPLOY.md                           # Step-by-step frontend sync, ECR image push, ECS deploy, CI/CD, and teardown guide
 ├── client/                             # React 18 + Vite SPA (builds to static dist/ for S3 + CloudFront)
 │   ├── index.html
 │   ├── package.json
@@ -60,18 +61,12 @@ multi-container-services-prod/
 │   ├── keys.js                         # Env-driven config (PORT, PGSSL, REDIS_TLS)
 │   ├── index.js                        # /health, /api/* routes, TLS for RDS/Valkey, graceful SIGTERM
 │   └── package.json
-├── worker/                             # Production background worker (ECS Fargate)
-│   ├── Dockerfile                      # Non-root node:22-alpine
-│   ├── .dockerignore
-│   ├── keys.js                         # Env-driven config (REDIS_TLS)
-│   ├── index.js                        # TLS Valkey Pub/Sub subscriber, graceful SIGTERM
-│   └── package.json
-└── infra/                              # AWS CDK (TypeScript) infrastructure stack
-    ├── bin/multi-container-services-prod.ts
-    ├── lib/multi-container-services-prod-stack.ts
-    ├── cdk.json
-    ├── package.json
-    └── tsconfig.json
+└── worker/                             # Production background worker (ECS Fargate)
+    ├── Dockerfile                      # Non-root node:22-alpine
+    ├── .dockerignore
+    ├── keys.js                         # Env-driven config (REDIS_TLS)
+    ├── index.js                        # TLS Valkey Pub/Sub subscriber, graceful SIGTERM
+    └── package.json
 ```
 
 ---
@@ -91,5 +86,5 @@ multi-container-services-prod/
 
 ## Deployment
 
-- **[AWS.md](./AWS.md)** — Required AWS & GitHub setup before your first push (ACM cert in `us-east-1`, CDK bootstrap, GitHub OIDC IAM role, repository variables, and DNS).
-- **[DEPLOY.md](./DEPLOY.md)** — Local CDK commands (`synth`, `diff`, `deploy`, `destroy`), production hardening checklist, and estimated monthly costs.
+- **[AWS.md](./AWS.md)** — Complete manual AWS Console setup guide (ACM `us-east-1`, VPC, Security Groups, RDS, ElastiCache Valkey, ECR, ALB, ECS Fargate, S3 + CloudFront, DNS, and GitHub OIDC IAM role).
+- **[DEPLOY.md](./DEPLOY.md)** — Step-by-step frontend build/sync, Docker build/push to ECR, ECS rolling deploys, production hardening checklist, costs, and manual teardown.

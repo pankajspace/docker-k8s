@@ -5,6 +5,3 @@ client/dist/
 ec2/.env
 *.log
 .DS_Store
-infra/cdk.out/
-infra/*.js
-infra/*.d.ts

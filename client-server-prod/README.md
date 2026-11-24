@@ -1,8 +1,8 @@
 # Client-Server Prod (AWS Architecture)
 
-Production-ready AWS deployment of the Fibonacci calculator app using a **split custom-domain architecture**:
+Production-ready AWS deployment of the Fibonacci calculator app using a **split custom-domain architecture** configured manually in the AWS Console:
 
-- **Frontend (`https://fib1.techtoday.click`):** Static React + Vite SPA hosted in a private **Amazon S3** bucket and served globally over HTTPS via **Amazon CloudFront** + **AWS ACM** (`us-east-1`).
+- **Frontend (`https://fib1.techtoday.click`):** Static React + Vite SPA hosted in a private **Amazon S3** bucket and served globally over HTTPS via **Amazon CloudFront** (OAC) + **AWS ACM** (`us-east-1`).
 - **Backend (`https://api.fib1.techtoday.click`):** Containerized Express API running on **Amazon EC2** behind **Caddy**, which automatically provisions and renews Let's Encrypt HTTPS certificates and proxies requests to the private `api:5000` container.
 - **Storage:** In-memory JavaScript structures (`seenIndexes`, `calculatedValues`) inside the single EC2 API container.
 
@@ -42,14 +42,8 @@ flowchart LR
 
 client-server-prod/
 ├── README.md                  # Architecture overview
-├── AWS.md                     # Pre-push AWS setup checklist (ACM, EC2 key pair, OIDC IAM, DNS)
-├── DEPLOY.md                  # Step-by-step CDK deploy, EC2 sync, and teardown guide
-├── infra/                     # AWS CDK (TypeScript) stack for S3, CloudFront, VPC, EC2 & Elastic IP
-│   ├── bin/client-server-prod.ts
-│   ├── lib/client-server-prod-stack.ts
-│   ├── cdk.json
-│   ├── package.json
-│   └── tsconfig.json
+├── AWS.md                     # Manual AWS Console setup guide (ACM, S3, CloudFront, EC2, DNS, IAM)
+├── DEPLOY.md                  # Step-by-step frontend sync, EC2/Caddy deploy, CI/CD, and teardown guide
 ├── client/                    # React 18 + Vite SPA (builds to static dist/ for S3)
 │   ├── .env.example           # Example VITE_API_URL for production builds
 │   ├── package.json           # Includes `npm run build` for static output
@@ -81,5 +75,5 @@ client-server-prod/
 
 ## Deployment
 
-- **[AWS.md](./AWS.md)** — AWS console setup checklist (ACM `us-east-1`, S3 + OAC, CloudFront, EC2 + Elastic IP + Security Group, DNS, least-privilege IAM policy, costs & teardown).
-- **[DEPLOY.md](./DEPLOY.md)** — Step-by-step EC2/Caddy setup, frontend build/sync commands, and GitHub Actions secrets/variables.
+- **[AWS.md](./AWS.md)** — Manual AWS Console setup guide (ACM `us-east-1`, S3 + OAC, CloudFront, EC2 + Elastic IP + Security Group, DNS, GitHub OIDC IAM role, costs & teardown).
+- **[DEPLOY.md](./DEPLOY.md)** — Step-by-step frontend build/sync, EC2/Caddy deployment, verification, and GitHub Actions CI/CD.
